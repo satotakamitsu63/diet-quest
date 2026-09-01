@@ -3,7 +3,7 @@
  * iPhone の音声認識が実際に返しそうな、句読点の少ない話し言葉で試す。
  * npm run understand で実行する。
  */
-import { parseSpokenMeal } from '../src/logic/parseSpokenMeal';
+import { flattenParsedMeal, parseSpokenMeal } from '../src/logic/parseSpokenMeal';
 
 type Case = {
   utterance: string;
@@ -58,7 +58,8 @@ const missingFoods = new Set<string>();
 
 for (const testCase of CASES) {
   const parsed = parseSpokenMeal(testCase.utterance);
-  const names = parsed.items.map((item) => item.name);
+  const parsedItems = flattenParsedMeal(parsed);
+  const names = parsedItems.map((item) => item.name);
   const problems: string[] = [];
 
   for (const expected of testCase.expect) {
@@ -71,13 +72,13 @@ for (const testCase of CASES) {
     if (names.includes(rejected)) problems.push(`「${rejected}」を余計に拾っている`);
   }
   for (const [name, expectedGrams] of Object.entries(testCase.grams ?? {})) {
-    const item = parsed.items.find((entry) => entry.name === name);
+    const item = parsedItems.find((entry) => entry.name === name);
     if (item && item.grams !== expectedGrams) {
       problems.push(`${name} が ${item.grams}g（期待 ${expectedGrams}g）`);
     }
   }
 
-  const detail = parsed.items.map((item) => `${item.name}${item.grams}g`).join(' / ') || '（なし）';
+  const detail = parsedItems.map((item) => `${item.name}${item.grams}g`).join(' / ') || '（なし）';
   const unmatched = parsed.unmatchedSegments.length
     ? `　拾えなかった語: ${parsed.unmatchedSegments.join('|')}`
     : '';
@@ -91,7 +92,52 @@ for (const testCase of CASES) {
   }
 }
 
-console.log(`\n${CASES.length}件中 ${CASES.length - failures}件が期待どおり。`);
+console.log('\n== 食事の区分の振り分け ==');
+type SlotCase = { utterance: string; expect: Array<[string | null, string[]]> };
+const SLOT_CASES: SlotCase[] = [
+  {
+    utterance: '朝食はパン2枚と卵、昼はラーメン、夜はごはん一膳と鮭の塩焼き',
+    expect: [['breakfast', ['食パン', '卵']], ['lunch', ['ラーメン']], ['dinner', ['ごはん', '鮭の塩焼き']]],
+  },
+  {
+    utterance: '朝ごはんはヨーグルトとバナナ、お昼はカレーライス',
+    expect: [['breakfast', ['ヨーグルト', 'バナナ']], ['lunch', ['カレーライス']]],
+  },
+  {
+    utterance: '間食にチョコレート',
+    expect: [['snack', ['チョコレート']]],
+  },
+  {
+    utterance: 'ごはんと味噌汁',
+    expect: [[null, ['ごはん', '味噌汁']]],
+  },
+  {
+    utterance: '晩ごはんは唐揚げとサラダ、夜食におにぎり',
+    expect: [['dinner', ['唐揚げ', 'サラダ']], ['snack', ['おにぎり']]],
+  },
+];
+
+for (const testCase of SLOT_CASES) {
+  const parsed = parseSpokenMeal(testCase.utterance);
+  const actual = parsed.groups.map(
+    (group) => [group.slot, group.items.map((item) => item.name)] as const,
+  );
+  const detail = actual.map(([slot, names]) => `${slot ?? '区分なし'}:${names.join('+')}`).join(' / ');
+  const ok =
+    actual.length === testCase.expect.length &&
+    testCase.expect.every(([slot, names], index) => {
+      const [actualSlot, actualNames] = actual[index];
+      return actualSlot === slot && names.every((name) => actualNames.includes(name));
+    });
+  if (ok) {
+    console.log(`  OK 「${testCase.utterance}」→ ${detail}`);
+  } else {
+    failures += 1;
+    console.log(`NG   「${testCase.utterance}」→ ${detail}`);
+  }
+}
+
+console.log(`\n${CASES.length + SLOT_CASES.length}件中 ${CASES.length + SLOT_CASES.length - failures}件が期待どおり。`);
 if (missingFoods.size > 0) {
   console.log(`辞書に無いか拾えない食品: ${[...missingFoods].join('、')}`);
 }

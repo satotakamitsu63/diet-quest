@@ -3,7 +3,24 @@ import type { Nutrients } from '../data/nutrients';
 
 import type { AwardCategory, AwardScale, ClubKey } from '../data/clubs';
 
-export type CharacterSpecies = 'cat' | 'dog';
+export type CharacterSpecies =
+  | 'cat'
+  | 'dog'
+  | 'rabbit'
+  | 'bear'
+  | 'penguin'
+  | 'dragon';
+
+export const SPECIES_LABELS: Record<CharacterSpecies, string> = {
+  cat: 'ねこ',
+  dog: 'いぬ',
+  rabbit: 'うさぎ',
+  bear: 'くま',
+  penguin: 'ぺんぎん',
+  dragon: 'ドラゴン',
+};
+
+export const SPECIES_KEYS: CharacterSpecies[] = ['cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon'];
 
 /** 受賞歴。対戦の評価点になる。 */
 export type Award = {

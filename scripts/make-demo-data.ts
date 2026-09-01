@@ -3,7 +3,7 @@
  * 出力先は dist/demo-data.json。動作確認のときだけ使う。
  */
 import { writeFileSync } from 'node:fs';
-import { parseSpokenMeal } from '../src/logic/parseSpokenMeal';
+import { flattenParsedMeal, parseSpokenMeal } from '../src/logic/parseSpokenMeal';
 import type { AppData, MealLog, Profile } from '../src/lib/types';
 
 const now = new Date().toISOString();
@@ -48,7 +48,7 @@ for (let daysAgo = 13; daysAgo >= 0; daysAgo -= 1) {
         date: dateKey(date),
         slot: (['breakfast', 'lunch', 'dinner'] as const)[index],
         rawText: text,
-        items: parseSpokenMeal(text).items,
+        items: flattenParsedMeal(parseSpokenMeal(text)),
         createdAt: now,
       });
     });

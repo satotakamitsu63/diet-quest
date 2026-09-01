@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ActivityLevel } from '../data/dietaryReference';
 import { createId } from '../lib/repository';
-import type { Award, CharacterSpecies, GoalPreset, Profile } from '../lib/types';
+import { SPECIES_KEYS, SPECIES_LABELS, type Award, type GoalPreset, type Profile } from '../lib/types';
 import {
   AWARD_CATEGORY_LABELS,
   AWARD_SCALE_LABELS,
@@ -144,14 +144,14 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete }: Props) {
       <div className="field">
         <span>キャラクターの種類</span>
         <div className="chip-row">
-          {(['cat', 'dog'] as CharacterSpecies[]).map((species) => (
+          {SPECIES_KEYS.map((species) => (
             <button
               key={species}
               type="button"
               className={draft.species === species ? 'chip is-active' : 'chip'}
               onClick={() => update('species', species)}
             >
-              {species === 'cat' ? 'ねこ' : 'いぬ'}
+              {SPECIES_LABELS[species]}
             </button>
           ))}
         </div>

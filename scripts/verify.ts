@@ -13,7 +13,7 @@ import {
   resolveTargetBmi,
   resolveTargetBodyFatPercent,
 } from '../src/logic/bodyGoal';
-import { parseSpokenMeal } from '../src/logic/parseSpokenMeal';
+import { flattenParsedMeal, parseSpokenMeal } from '../src/logic/parseSpokenMeal';
 import {
   summarizeDay, buildCharacterState, adjustEnergyTarget, applyGrowthBoost,
 } from '../src/logic/score';
@@ -53,17 +53,17 @@ const cases: Array<[string, string[]]> = [
   ['トマト150グラム', ['トマト']],
 ];
 for (const [text, expected] of cases) {
-  const parsed = parseSpokenMeal(text);
-  const names = parsed.items.map((item) => item.name);
-  const detail = `${names.map((name, index) => `${name}${parsed.items[index].grams}g`).join(' / ')}`;
+  const parsedItems = flattenParsedMeal(parseSpokenMeal(text));
+  const names = parsedItems.map((item) => item.name);
+  const detail = `${names.map((name, index) => `${name}${parsedItems[index].grams}g`).join(' / ')}`;
   check(`「${text}」`, expected.every((name) => names.includes(name)), detail);
 }
 
-const eggs = parseSpokenMeal('卵2個').items[0];
+const eggs = flattenParsedMeal(parseSpokenMeal('卵2個'))[0];
 check('卵2個が100gになる', eggs?.grams === 100, `${eggs?.grams}g`);
-const karaage = parseSpokenMeal('唐揚げ3個').items[0];
+const karaage = flattenParsedMeal(parseSpokenMeal('唐揚げ3個'))[0];
 check('唐揚げ3個が1食分の100gになる', karaage?.grams === 100, `${karaage?.grams}g`);
-const bigCurry = parseSpokenMeal('カレーライス大盛り').items[0];
+const bigCurry = flattenParsedMeal(parseSpokenMeal('カレーライス大盛り'))[0];
 check('大盛りが1.5倍になる', bigCurry?.grams === 600, `${bigCurry?.grams}g`);
 
 console.log('\n== 食事摂取基準 ==');
@@ -235,7 +235,7 @@ const targets = { ...man40.recommended, energy: 2700 };
 function makeMealLog(date: string, text: string): MealLog {
   return {
     id: `m-${date}`, profileId: 'p1', date, slot: 'dinner', rawText: text,
-    items: parseSpokenMeal(text).items, createdAt: new Date().toISOString(),
+    items: flattenParsedMeal(parseSpokenMeal(text)), createdAt: new Date().toISOString(),
   };
 }
 const FULL_DAY_MEALS = [
@@ -474,6 +474,19 @@ console.log('\n== 週ごとのふりかえり ==');
 }
 
 console.log('\n== ドット絵の生成 ==');
+{
+  // 6種類すべてが描け、互いに違う見た目になっていること
+  const species = ['cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon'] as const;
+  const signatures = new Map<string, string>();
+  for (const kind of species) {
+    const grid = buildMascotGrid({ species: kind, shapeValue: 0.5, growthStage: 5, condition: 'steady' });
+    const filled = grid.flat().filter((cell) => cell !== '').length;
+    check(`${kind} が描ける`, filled > 200, `${filled}ドット`);
+    signatures.set(kind, grid.map((row) => row.map((c) => (c ? '1' : '0')).join('')).join(''));
+  }
+  const unique = new Set(signatures.values());
+  check('6種類すべて違うシルエットになる', unique.size === species.length, `${unique.size}種類`);
+}
 for (const stage of [0, 5, 9]) {
   for (const shape of [0.05, 0.5, 0.95]) {
     const grid = buildMascotGrid({ species: 'cat', shapeValue: shape, growthStage: stage, condition: 'steady' });

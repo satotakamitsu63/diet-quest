@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FOODS_BY_ID } from '../data/foods';
 import { scaleNutrients } from '../data/nutrients';
-import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { todayKey } from '../lib/dates';
 import { createId } from '../lib/repository';
 import { MEAL_SLOT_LABELS, type MealItem, type MealLog, type MealSlot, type Profile } from '../lib/types';
@@ -9,6 +8,7 @@ import { createMealItem, parseSpokenMeal, searchFoods } from '../logic/parseSpok
 
 const SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
+/** 文中で食事の区分が指定されていなかったときに、時刻から推測する。 */
 function guessSlot(): MealSlot {
   const hour = new Date().getHours();
   if (hour < 10) return 'breakfast';
@@ -17,88 +17,104 @@ function guessSlot(): MealSlot {
   return 'snack';
 }
 
+/** 画面上で編集できる、1つの食事のまとまり。 */
+type EditableGroup = {
+  id: string;
+  slot: MealSlot;
+  items: MealItem[];
+  /** 文中で区分が指定されていたかどうか。指定されていれば見出しに印を出す */
+  slotWasSpoken: boolean;
+};
+
 type Props = {
   profile: Profile;
   onSave: (log: MealLog) => Promise<void>;
 };
 
 export function MealRecorder({ profile, onSave }: Props) {
-  const speech = useSpeechRecognition();
-  const [manualText, setManualText] = useState('');
-  const [items, setItems] = useState<MealItem[]>([]);
+  const [text, setText] = useState('');
+  const [groups, setGroups] = useState<EditableGroup[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
-  const [slot, setSlot] = useState<MealSlot>(guessSlot);
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchTargetId, setSearchTargetId] = useState<string | null>(null);
+  const [gramsDrafts, setGramsDrafts] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
-  // 打ち直しの途中で「0」に化けないよう、入力中の文字列はそのまま持っておく
-  const [gramsDrafts, setGramsDrafts] = useState<Record<number, string>>({});
-
-  const spokenText = `${speech.transcript}${speech.interimTranscript}`;
-  const editorText = manualText || spokenText;
 
   const searchResults = useMemo(() => searchFoods(searchQuery), [searchQuery]);
 
-  const savableItems = items.filter((item) => item.grams > 0);
-  const totalEnergy = savableItems.reduce((total, item) => total + item.nutrients.energy, 0);
+  const savableGroups = groups
+    .map((group) => ({ ...group, items: group.items.filter((item) => item.grams > 0) }))
+    .filter((group) => group.items.length > 0);
+  const totalEnergy = savableGroups.reduce(
+    (total, group) => total + group.items.reduce((sum, item) => sum + item.nutrients.energy, 0),
+    0,
+  );
 
   function handleParse() {
-    const parsed = parseSpokenMeal(editorText);
-    setGramsDrafts({});
-    setItems((current) => [...current, ...parsed.items]);
+    const parsed = parseSpokenMeal(text);
+    const fallback = guessSlot();
+    setGroups((current) => [
+      ...current,
+      ...parsed.groups.map((group) => ({
+        id: createId(),
+        slot: group.slot ?? fallback,
+        items: group.items,
+        slotWasSpoken: group.slot !== null,
+      })),
+    ]);
     setUnmatched(parsed.unmatchedSegments);
-    setManualText('');
-    speech.reset();
+    setGramsDrafts({});
+    setText('');
   }
 
-  function handleGramsChange(index: number, rawValue: string) {
-    setGramsDrafts((current) => ({ ...current, [index]: rawValue }));
-    // 空欄や不正な値で NaN が栄養素に混ざらないようにする
+  function updateGroup(groupId: string, change: (group: EditableGroup) => EditableGroup) {
+    setGroups((current) => current.map((group) => (group.id === groupId ? change(group) : group)));
+  }
+
+  function handleGramsChange(groupId: string, index: number, rawValue: string) {
+    const key = `${groupId}:${index}`;
+    setGramsDrafts((current) => ({ ...current, [key]: rawValue }));
     const parsed = Number(rawValue);
-    const grams = rawValue.trim() === '' || !Number.isFinite(parsed) ? 0 : Math.max(0, Math.min(2000, parsed));
-    setItems((current) =>
-      current.map((item, itemIndex) => {
+    const grams =
+      rawValue.trim() === '' || !Number.isFinite(parsed) ? 0 : Math.max(0, Math.min(2000, parsed));
+    updateGroup(groupId, (group) => ({
+      ...group,
+      items: group.items.map((item, itemIndex) => {
         if (itemIndex !== index) return item;
         const food = FOODS_BY_ID.get(item.foodId);
         if (!food) return item;
         return { ...item, grams, nutrients: scaleNutrients(food.per100g, grams) };
       }),
-    );
+    }));
   }
 
-  /** 入力欄から離れたら、実際に採用された値に表示をそろえる。 */
-  function handleGramsBlur(index: number) {
+  function handleGramsBlur(groupId: string, index: number) {
     setGramsDrafts((current) => {
       const next = { ...current };
-      delete next[index];
+      delete next[`${groupId}:${index}`];
       return next;
     });
   }
 
-  function handleRemoveItem(index: number) {
-    setItems((current) => current.filter((_, itemIndex) => itemIndex !== index));
-    setGramsDrafts({});
-  }
-
   async function handleSave() {
-    // 分量が 0 の項目は記録に混ぜない
-    const savableItems = items.filter((item) => item.grams > 0);
-    if (savableItems.length === 0) return;
+    if (savableGroups.length === 0) return;
     setIsSaving(true);
     try {
-      await onSave({
-        id: createId(),
-        profileId: profile.id,
-        date: todayKey(),
-        slot,
-        rawText: editorText,
-        items: savableItems,
-        createdAt: new Date().toISOString(),
-      });
-      setItems([]);
+      for (const group of savableGroups) {
+        await onSave({
+          id: createId(),
+          profileId: profile.id,
+          date: todayKey(),
+          slot: group.slot,
+          rawText: '',
+          items: group.items,
+          createdAt: new Date().toISOString(),
+        });
+      }
+      setGroups([]);
       setUnmatched([]);
       setGramsDrafts({});
-      setManualText('');
-      speech.reset();
+      setText('');
     } finally {
       setIsSaving(false);
     }
@@ -108,57 +124,24 @@ export function MealRecorder({ profile, onSave }: Props) {
     <section className="card">
       <h2 className="card-title">食べたものを記録する</h2>
 
-      <div className="slot-picker">
-        {SLOTS.map((value) => (
-          <button
-            key={value}
-            type="button"
-            className={value === slot ? 'chip is-active' : 'chip'}
-            onClick={() => setSlot(value)}
-          >
-            {MEAL_SLOT_LABELS[value]}
-          </button>
-        ))}
-      </div>
-
-      {speech.isSupported && (
-        <button
-          type="button"
-          className={speech.isListening ? 'mic-button is-listening' : 'mic-button'}
-          onClick={speech.isListening ? speech.stop : speech.start}
-        >
-          {speech.isListening ? '● 聞いています（押すと停止）' : '🎤 話して入力する'}
-        </button>
-      )}
-
-      {speech.error && <p className="alert">{speech.error}</p>}
+      <p className="note">
+        下の欄をタップして、キーボードの<strong>マイクキー</strong>を押すと話して入力できます。
+        「朝食は〜、昼は〜」のようにまとめて言えば、朝・昼・晩・間食に自動で振り分けます。
+      </p>
 
       <textarea
         className="text-input"
-        rows={3}
-        value={editorText}
-        placeholder="例：ごはん一膳と鮭の塩焼き、味噌汁、ほうれん草のおひたし"
-        onChange={(event) => setManualText(event.target.value)}
+        rows={4}
+        value={text}
+        placeholder="例：朝食はパン2枚と卵、昼はラーメン、夜はごはん一膳と鮭の塩焼きと味噌汁"
+        onChange={(event) => setText(event.target.value)}
       />
 
-      <p className="note">
-        {speech.isSupported
-          ? 'この欄をタップして、キーボードのマイクキーから話しても入力できます。iPhoneではそちらのほうが確実で、認識精度も高めです。'
-          : 'この欄をタップして、キーボードのマイクキーから話すと音声で入力できます。'}
-      </p>
-
       <div className="button-row">
-        <button type="button" className="primary-button" onClick={handleParse} disabled={!editorText.trim()}>
+        <button type="button" className="primary-button" onClick={handleParse} disabled={!text.trim()}>
           栄養に変換する
         </button>
-        <button
-          type="button"
-          className="ghost-button"
-          onClick={() => {
-            setManualText('');
-            speech.reset();
-          }}
-        >
+        <button type="button" className="ghost-button" onClick={() => setText('')}>
           入力を消す
         </button>
       </div>
@@ -167,76 +150,127 @@ export function MealRecorder({ profile, onSave }: Props) {
         <p className="note">
           わからなかった言葉：{unmatched.join(' / ')}
           <br />
-          下の検索から手で足してください。
+          下の「食品を足す」から手で加えてください。
         </p>
       )}
 
-      {items.length > 0 && (
-        <ul className="item-list">
-          {items.map((item, index) => (
-            <li className="item-row" key={`${item.foodId}-${index}`}>
-              <span className="item-name">{item.name}</span>
-              <label className="item-grams">
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={2000}
-                  value={gramsDrafts[index] ?? String(item.grams)}
-                  onChange={(event) => handleGramsChange(index, event.target.value)}
-                  onBlur={() => handleGramsBlur(index)}
-                />
-                g
-              </label>
-              <span className="item-energy">{Math.round(item.nutrients.energy)}kcal</span>
-              <button type="button" className="icon-button" onClick={() => handleRemoveItem(index)}>
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+      {groups.map((group) => (
+        <div className="meal-group" key={group.id}>
+          <div className="meal-group-head">
+            <div className="chip-row">
+              {SLOTS.map((slot) => (
+                <button
+                  key={slot}
+                  type="button"
+                  className={group.slot === slot ? 'chip is-active' : 'chip'}
+                  onClick={() => updateGroup(group.id, (current) => ({ ...current, slot }))}
+                >
+                  {MEAL_SLOT_LABELS[slot]}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setGroups((current) => current.filter((entry) => entry.id !== group.id))}
+              aria-label="このまとまりを消す"
+            >
+              ×
+            </button>
+          </div>
 
-      <div className="search-block">
-        <input
-          className="text-input"
-          type="search"
-          value={searchQuery}
-          placeholder="食品を名前で探して足す"
-          onChange={(event) => setSearchQuery(event.target.value)}
-        />
-        {searchResults.length > 0 && (
-          <ul className="search-results">
-            {searchResults.map((food) => (
-              <li key={food.id}>
+          {!group.slotWasSpoken && (
+            <p className="note">
+              どの食事か言われていなかったので、時刻から「{MEAL_SLOT_LABELS[group.slot]}」にしました。
+            </p>
+          )}
+
+          <ul className="item-list">
+            {group.items.map((item, index) => (
+              <li className="item-row" key={`${item.foodId}-${index}`}>
+                <span className="item-name">{item.name}</span>
+                <label className="item-grams">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={2000}
+                    value={gramsDrafts[`${group.id}:${index}`] ?? String(item.grams)}
+                    onChange={(event) => handleGramsChange(group.id, index, event.target.value)}
+                    onBlur={() => handleGramsBlur(group.id, index)}
+                  />
+                  g
+                </label>
+                <span className="item-energy">{Math.round(item.nutrients.energy)}kcal</span>
                 <button
                   type="button"
-                  onClick={() => {
-                    setItems((current) => [...current, createMealItem(food, food.servingGrams)]);
-                    setSearchQuery('');
-                  }}
+                  className="icon-button"
+                  onClick={() =>
+                    updateGroup(group.id, (current) => ({
+                      ...current,
+                      items: current.items.filter((_, itemIndex) => itemIndex !== index),
+                    }))
+                  }
+                  aria-label="この食品を消す"
                 >
-                  {food.name}
-                  <span className="search-serving">
-                    {food.servingLabel}＝{food.servingGrams}g
-                  </span>
+                  ×
                 </button>
               </li>
             ))}
           </ul>
-        )}
-      </div>
 
-      <div className="button-row">
-        <button
-          type="button"
-          className="primary-button"
-          onClick={handleSave}
-          disabled={savableItems.length === 0 || isSaving}
-        >
-          {isSaving ? '保存中…' : `この${MEAL_SLOT_LABELS[slot]}を記録（${Math.round(totalEnergy)}kcal）`}
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => setSearchTargetId(searchTargetId === group.id ? null : group.id)}
+          >
+            {searchTargetId === group.id ? '食品を足すのをやめる' : '食品を足す'}
+          </button>
+
+          {searchTargetId === group.id && (
+            <div className="search-block">
+              <input
+                className="text-input"
+                type="search"
+                value={searchQuery}
+                placeholder="食品を名前で探す"
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+              {searchResults.length > 0 && (
+                <ul className="search-results">
+                  {searchResults.map((food) => (
+                    <li key={food.id}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateGroup(group.id, (current) => ({
+                            ...current,
+                            items: [...current.items, createMealItem(food, food.servingGrams)],
+                          }));
+                          setSearchQuery('');
+                        }}
+                      >
+                        {food.name}
+                        <span className="search-serving">
+                          {food.servingLabel}＝{food.servingGrams}g
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {savableGroups.length > 0 && (
+        <button type="button" className="primary-button" onClick={handleSave} disabled={isSaving}>
+          {isSaving
+            ? '保存中…'
+            : `${savableGroups.length}件の食事を記録（合計${Math.round(totalEnergy)}kcal）`}
         </button>
-      </div>
+      )}
     </section>
   );
 }

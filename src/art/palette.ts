@@ -56,9 +56,20 @@ const DULL_COAT: Hsl = { hue: 28, saturation: 9, lightness: 36 };
 const FINAL_COAT: Record<CharacterSpecies, Hsl> = {
   cat: { hue: 38, saturation: 64, lightness: 71 },
   dog: { hue: 24, saturation: 58, lightness: 60 },
+  rabbit: { hue: 345, saturation: 32, lightness: 86 },
+  bear: { hue: 18, saturation: 42, lightness: 46 },
+  penguin: { hue: 210, saturation: 30, lightness: 46 },
+  dragon: { hue: 148, saturation: 52, lightness: 52 },
 };
 
-const ACCESSORY_HUE: Record<CharacterSpecies, number> = { cat: 340, dog: 200 };
+const ACCESSORY_HUE: Record<CharacterSpecies, number> = {
+  cat: 340,
+  dog: 200,
+  rabbit: 280,
+  bear: 45,
+  penguin: 25,
+  dragon: 55,
+};
 
 export type PaletteInput = {
   species: CharacterSpecies;

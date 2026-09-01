@@ -37,7 +37,7 @@ create table if not exists public.profiles (
   father_height_cm numeric,
   mother_height_cm numeric,
   target_adult_height_cm numeric,
-  species text not null default 'cat' check (species in ('cat', 'dog')),
+  species text not null default 'cat' check (species in ('cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon')),
   character_name text not null,
   club text not null default 'none',
   custom_special_move_name text,
@@ -131,6 +131,9 @@ alter table public.profiles add column if not exists target_adult_height_cm nume
 alter table public.profiles add column if not exists club text not null default 'none';
 alter table public.profiles add column if not exists custom_special_move_name text;
 alter table public.profiles add column if not exists awards jsonb not null default '[]'::jsonb;
+alter table public.profiles drop constraint if exists profiles_species_check;
+alter table public.profiles add constraint profiles_species_check
+  check (species in ('cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon'));
 
 alter table public.family_groups enable row level security;
 alter table public.group_members enable row level security;

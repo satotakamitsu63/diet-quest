@@ -1,6 +1,6 @@
 import { FOODS, type Food } from '../data/foods';
 import { scaleNutrients } from '../data/nutrients';
-import type { MealItem } from '../lib/types';
+import type { MealItem, MealSlot } from '../lib/types';
 
 const KANJI_DIGITS: Record<string, number> = {
   〇: 0, 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9,
@@ -117,15 +117,50 @@ function isStandaloneSingleCharacter(text: string, index: number): boolean {
 }
 
 /**
- * 食品名を含んでいるが食品ではない語。
- * 「朝ごはん」の「ごはん」、「お茶碗」の「お茶」を食品として拾ってしまうのを防ぐ。
- * 長いものから順に消す。
+ * 「朝食は〜、昼は〜」のように、どの食事かを示す語。
+ * ここで区切って、それぞれを朝・昼・晩・間食に振り分ける。
+ * 同時に「朝ごはん」の「ごはん」を食品として拾ってしまうのも防ぐ。
  */
-const NON_FOOD_PHRASES = [
-  '朝ごはん', '朝ご飯', '昼ごはん', '昼ご飯', '晩ごはん', '晩ご飯', '晩御飯',
-  '夕ごはん', '夕ご飯', '夜ごはん', '夜ご飯', 'ご飯茶碗', 'お茶碗',
-  '朝食', '昼食', '夕食', '夕飯', '夜食', '間食', 'お昼', 'おやつ',
-].sort((left, right) => right.length - left.length);
+type SlotMarker = { phrase: string; slot: MealSlot };
+
+const SLOT_MARKER_LIST: SlotMarker[] = [
+  { phrase: '朝ごはん', slot: 'breakfast' },
+  { phrase: '朝ご飯', slot: 'breakfast' },
+  { phrase: '朝食', slot: 'breakfast' },
+  { phrase: '朝めし', slot: 'breakfast' },
+  { phrase: '朝', slot: 'breakfast' },
+  { phrase: '昼ごはん', slot: 'lunch' },
+  { phrase: '昼ご飯', slot: 'lunch' },
+  { phrase: '昼食', slot: 'lunch' },
+  { phrase: 'お昼', slot: 'lunch' },
+  { phrase: 'らんち', slot: 'lunch' },
+  { phrase: '昼', slot: 'lunch' },
+  { phrase: '晩ごはん', slot: 'dinner' },
+  { phrase: '晩ご飯', slot: 'dinner' },
+  { phrase: '晩御飯', slot: 'dinner' },
+  { phrase: '夕ごはん', slot: 'dinner' },
+  { phrase: '夕ご飯', slot: 'dinner' },
+  { phrase: '夜ごはん', slot: 'dinner' },
+  { phrase: '夜ご飯', slot: 'dinner' },
+  { phrase: '夕食', slot: 'dinner' },
+  { phrase: '夕飯', slot: 'dinner' },
+  { phrase: 'でぃなー', slot: 'dinner' },
+  { phrase: '晩', slot: 'dinner' },
+  { phrase: '夜食', slot: 'snack' },
+  { phrase: '間食', slot: 'snack' },
+  { phrase: 'おやつ', slot: 'snack' },
+  { phrase: '夜', slot: 'dinner' },
+];
+
+/** 長い目印から先に照合する。「朝食」より短い「朝」が先に当たらないようにするため。 */
+const SLOT_MARKERS: SlotMarker[] = [...SLOT_MARKER_LIST].sort(
+  (left, right) => right.phrase.length - left.phrase.length,
+);
+
+/** 食品名を含むが食品ではない語。器の名前など。 */
+const NON_FOOD_PHRASES = ['ご飯茶碗', 'お茶碗'].sort(
+  (left, right) => right.length - left.length,
+);
 
 /**
  * 食品ではない語を、同じ長さの制御文字で塗りつぶす。
@@ -203,15 +238,67 @@ function resolveGrams(food: Food, amount: SegmentAmount): number {
   return Math.max(1, Math.round(gramsPerUnit * amount.count * amount.modifier));
 }
 
-export type ParsedMeal = {
+export type ParsedMealGroup = {
+  /** 文中で指定されていた食事の区分。指定がなければ null */
+  slot: MealSlot | null;
   items: MealItem[];
+};
+
+export type ParsedMeal = {
+  groups: ParsedMealGroup[];
   /** 食品を1つも見つけられなかった文節。手で足してもらうために返す */
   unmatchedSegments: string[];
 };
 
-/** 音声入力された1文を食品と分量に分解する。 */
-export function parseSpokenMeal(rawText: string): ParsedMeal {
-  const segments = rawText
+type SlotChunk = { slot: MealSlot | null; text: string };
+
+/**
+ * 「朝食は〜、昼は〜」のような文を、食事の区分ごとに切り分ける。
+ * 目印が無ければ、全体を区分なしの1つとして返す。
+ */
+function splitBySlot(rawText: string): SlotChunk[] {
+  const normalized = normalizeText(rawText);
+  type Hit = { index: number; length: number; slot: MealSlot };
+  const hits: Hit[] = [];
+
+  for (const marker of SLOT_MARKERS) {
+    const phrase = normalizeText(marker.phrase);
+    let from = 0;
+    while (from <= normalized.length - phrase.length) {
+      const index = normalized.indexOf(phrase, from);
+      if (index === -1) break;
+      // すでに見つけた長い目印と重なる場合は数えない
+      const overlaps = hits.some(
+        (hit) => index < hit.index + hit.length && hit.index < index + phrase.length,
+      );
+      if (!overlaps) hits.push({ index, length: phrase.length, slot: marker.slot });
+      from = index + 1;
+    }
+  }
+
+  if (hits.length === 0) return [{ slot: null, text: normalized }];
+
+  hits.sort((left, right) => left.index - right.index);
+  const chunks: SlotChunk[] = [];
+
+  // 最初の目印より前の部分は、区分が指定されていない扱いにする
+  const head = normalized.slice(0, hits[0].index).trim();
+  if (head.length > 0) chunks.push({ slot: null, text: head });
+
+  hits.forEach((hit, order) => {
+    const start = hit.index + hit.length;
+    const end = order + 1 < hits.length ? hits[order + 1].index : normalized.length;
+    // 目印の直後の「は」「に」「には」は本文ではないので落とす
+    const text = normalized.slice(start, end).replace(/^(には|は|に|も|わ)/, '').trim();
+    if (text.length > 0) chunks.push({ slot: hit.slot, text });
+  });
+
+  return chunks.length > 0 ? chunks : [{ slot: null, text: normalized }];
+}
+
+/** 1つの区分ぶんの文字列を、食品と分量に分解する。 */
+function parseChunk(chunkText: string): { items: MealItem[]; unmatched: string[] } {
+  const segments = chunkText
     .split(SEGMENT_SEPARATOR)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length > 0);
@@ -220,7 +307,7 @@ export function parseSpokenMeal(rawText: string): ParsedMeal {
   const unmatchedSegments: string[] = [];
 
   for (const segment of segments) {
-    const normalized = maskNonFoodPhrases(normalizeText(segment).replace(TRAILING_VERBS, ''));
+    const normalized = maskNonFoodPhrases(segment.replace(TRAILING_VERBS, ''));
     const matches = dropIngredientsBeforeDish(findFoodMatches(normalized), normalized);
     if (matches.length === 0) {
       unmatchedSegments.push(segment);
@@ -243,7 +330,29 @@ export function parseSpokenMeal(rawText: string): ParsedMeal {
     });
   }
 
-  return { items, unmatchedSegments };
+  return { items, unmatched: unmatchedSegments };
+}
+
+/**
+ * 音声入力された文を、食事の区分ごとに食品と分量へ分解する。
+ * 「朝食はパンと卵、昼はラーメン」のように1度に複数の食事を入れられる。
+ */
+export function parseSpokenMeal(rawText: string): ParsedMeal {
+  const groups: ParsedMealGroup[] = [];
+  const unmatchedSegments: string[] = [];
+
+  for (const chunk of splitBySlot(rawText)) {
+    const parsed = parseChunk(chunk.text);
+    unmatchedSegments.push(...parsed.unmatched);
+    if (parsed.items.length > 0) groups.push({ slot: chunk.slot, items: parsed.items });
+  }
+
+  return { groups, unmatchedSegments };
+}
+
+/** 区分を問わず、拾えた食品をすべて平らに並べる。 */
+export function flattenParsedMeal(parsed: ParsedMeal): MealItem[] {
+  return parsed.groups.flatMap((group) => group.items);
 }
 
 /** 手入力や分量の修正から食事の項目を作り直す。 */
