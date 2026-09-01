@@ -161,7 +161,18 @@ drop policy if exists body_logs_member_all on public.body_logs;
 create policy body_logs_member_all on public.body_logs
   for all using (public.is_group_member(group_id)) with check (public.is_group_member(group_id));
 
--- 家族の記録がその場で反映されるようにする
-alter publication supabase_realtime add table public.profiles;
-alter publication supabase_realtime add table public.meal_logs;
-alter publication supabase_realtime add table public.body_logs;
+-- 家族の記録がその場で反映されるようにする。
+-- すでに追加済みの場合にエラーで止まらないよう、存在を確かめてから追加する。
+do $$
+declare
+  target text;
+begin
+  foreach target in array array['profiles', 'meal_logs', 'body_logs'] loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = target
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', target);
+    end if;
+  end loop;
+end $$;
