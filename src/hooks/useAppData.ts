@@ -13,6 +13,8 @@ export type AppDataState = {
   data: AppData;
   isLoading: boolean;
   syncMode: SyncMode;
+  /** いまログインしているアカウントの ID。共有していないときは null */
+  currentUserId: string | null;
   saveProfile: (profile: Profile) => Promise<void>;
   removeProfile: (profileId: string) => Promise<void>;
   saveMealLog: (log: MealLog) => Promise<void>;
@@ -36,12 +38,28 @@ export function useAppData(): AppDataState {
   const repositoryRef = useRef<Repository>(createRepository());
   const [data, setData] = useState<AppData>(() => createEmptyAppData());
   const [isLoading, setIsLoading] = useState(true);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    const loaded = await repositoryRef.current.load();
+    const repository = repositoryRef.current;
+    const loaded = await repository.load();
+
+    // 共有しているときは、ログインした本人のプロフィールを最初に開く
+    let ownProfileId: string | null = null;
+    if (repository instanceof SupabaseRepository) {
+      const userId = await repository.getCurrentUserId();
+      setCurrentUserId(userId);
+      ownProfileId = loaded.profiles.find((profile) => profile.ownerId === userId)?.id ?? null;
+    }
+
     setData((current) => ({
       ...loaded,
-      activeProfileId: loaded.activeProfileId ?? current.activeProfileId ?? loaded.profiles[0]?.id ?? null,
+      activeProfileId:
+        ownProfileId ??
+        loaded.activeProfileId ??
+        current.activeProfileId ??
+        loaded.profiles[0]?.id ??
+        null,
     }));
     setIsLoading(false);
   }, []);
@@ -114,6 +132,7 @@ export function useAppData(): AppDataState {
     data,
     isLoading,
     syncMode,
+    currentUserId,
     saveProfile,
     removeProfile,
     saveMealLog,

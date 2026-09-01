@@ -81,7 +81,7 @@ check('10歳女児 身長140cmの標準体重', calculateChildStandardWeight(10,
 
 function makeProfile(overrides: Partial<Profile>): Profile {
   return {
-    id: 'p1', groupId: 'g1', displayName: 'テスト', birthDate: null, ageYears: 40,
+    id: 'p1', groupId: 'g1', ownerId: null, displayName: 'テスト', birthDate: null, ageYears: 40,
     sex: 'male', heightCm: 172, activityLevel: 2, isMenstruating: false,
     goalPreset: 'ideal', customTargetWeightKg: null, customTargetBmi: null,
     customTargetBodyFatPercent: null,

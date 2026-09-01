@@ -15,7 +15,7 @@ function dateKey(date: Date): string {
 
 function makeProfile(overrides: Partial<Profile> & Pick<Profile, 'id' | 'displayName' | 'characterName'>): Profile {
   return {
-    groupId, birthDate: null, ageYears: 40, sex: 'male', heightCm: 170, activityLevel: 2,
+    groupId, ownerId: null, birthDate: null, ageYears: 40, sex: 'male', heightCm: 170, activityLevel: 2,
     isMenstruating: false, goalPreset: 'ideal', customTargetWeightKg: null, customTargetBmi: null,
     customTargetBodyFatPercent: null, aestheticSportMode: false, growthBoost: true,
     fatherHeightCm: null, motherHeightCm: null, targetAdultHeightCm: null,

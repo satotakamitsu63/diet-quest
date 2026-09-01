@@ -59,7 +59,8 @@ export function SupabaseGate({ onReady }: Props) {
     setMessage(null);
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim(),
-      options: { emailRedirectTo: window.location.origin },
+      // オリジンだけだと /diet-quest/ のようなサブパス配信で戻り先が 404 になる
+      options: { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href },
     });
     setIsWorking(false);
     if (error) setMessage(`ログイン用のメールを送れませんでした：${error.message}`);
@@ -110,9 +111,19 @@ export function SupabaseGate({ onReady }: Props) {
 
       {stage === 'signedOut' && (
         <section className="card">
-          <h2 className="card-title">家族で共有するためにログインする</h2>
+          <h2 className="card-title">ログイン</h2>
           <p className="note">
-            メールアドレスを入れると、ログイン用のリンクが届きます。パスワードは不要です。
+            ひとり1つのアカウントを作ります。メールアドレスを入れるとログイン用のリンクが届くので、
+            それを開けば完了です。パスワードは決めなくてかまいません。
+          </p>
+          <p className="note">
+            一度ログインすれば、その端末では次から入力は要りません。機種変更のときは同じ
+            メールアドレスでログインし直せば、記録もキャラクターもそのまま戻ります。
+          </p>
+          <p className="note">
+            子どものぶんのメールアドレスが無いときは、保護者のアドレスに <code>+</code> と名前を
+            足したもの（例：<code>oya+yui@gmail.com</code>）が使えます。別のアカウントとして扱われますが、
+            リンクは保護者の受信箱に届きます。
           </p>
           <label className="field">
             <span>メールアドレス</span>
@@ -150,7 +161,11 @@ export function SupabaseGate({ onReady }: Props) {
       {stage === 'chooseGroup' && (
         <>
           <section className="card">
-            <h2 className="card-title">家族グループを作る</h2>
+            <h2 className="card-title">家族グループを作る（最初の1人だけ）</h2>
+            <p className="note">
+              いちばん最初の人がここでグループを作ります。合言葉が1つ表示されるので、
+              それを家族に伝えてください。
+            </p>
             <label className="field">
               <span>グループの名前</span>
               <input
@@ -165,7 +180,10 @@ export function SupabaseGate({ onReady }: Props) {
           </section>
 
           <section className="card">
-            <h2 className="card-title">合言葉で参加する</h2>
+            <h2 className="card-title">合言葉で参加する（2人目から）</h2>
+            <p className="note">
+              先に作った人から聞いた合言葉を入れると、同じ家族グループに入れます。
+            </p>
             <label className="field">
               <span>合言葉（英数字6桁）</span>
               <input

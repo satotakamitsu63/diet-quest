@@ -40,6 +40,7 @@ export function createBlankProfile(groupId: string): Profile {
   return {
     id: createId(),
     groupId,
+    ownerId: null,
     displayName: '',
     birthDate: null,
     ageYears: null,

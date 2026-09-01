@@ -183,6 +183,7 @@ function AppContent() {
           <FamilyBoard
             data={state.data}
             activeProfileId={activeProfile?.id ?? null}
+            currentUserId={state.currentUserId}
             onSelectProfile={(profileId) => {
               state.setActiveProfileId(profileId);
               setTab('home');

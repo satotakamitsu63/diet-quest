@@ -13,6 +13,7 @@ import type {
 type ProfileRow = {
   id: string;
   group_id: string;
+  owner_id: string | null;
   display_name: string;
   birth_date: string | null;
   age_years: number | null;
@@ -62,6 +63,7 @@ function toProfile(row: ProfileRow): Profile {
   return {
     id: row.id,
     groupId: row.group_id,
+    ownerId: row.owner_id,
     displayName: row.display_name,
     birthDate: row.birth_date,
     ageYears: row.age_years,
@@ -91,6 +93,7 @@ function toProfileRow(profile: Profile): ProfileRow {
   return {
     id: profile.id,
     group_id: profile.groupId,
+    owner_id: profile.ownerId,
     display_name: profile.displayName,
     birth_date: profile.birthDate,
     age_years: profile.ageYears,
@@ -180,7 +183,19 @@ export class SupabaseRepository implements Repository {
   }
 
   async saveProfile(profile: Profile): Promise<void> {
-    await this.client.from('profiles').upsert(toProfileRow(profile));
+    // 所有者が未設定なら、いまログインしている人のものにする
+    let ownerId = profile.ownerId;
+    if (ownerId === null) {
+      const { data } = await this.client.auth.getUser();
+      ownerId = data.user?.id ?? null;
+    }
+    await this.client.from('profiles').upsert(toProfileRow({ ...profile, ownerId }));
+  }
+
+  /** いまログインしているアカウントの ID。未ログインなら null。 */
+  async getCurrentUserId(): Promise<string | null> {
+    const { data } = await this.client.auth.getUser();
+    return data.user?.id ?? null;
   }
 
   async removeProfile(profileId: string): Promise<void> {

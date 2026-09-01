@@ -7,10 +7,12 @@ import { MascotCanvas } from './MascotCanvas';
 type Props = {
   data: AppData;
   activeProfileId: string | null;
+  /** ログインしているアカウントの ID。自分のキャラに印を付けるのに使う */
+  currentUserId: string | null;
   onSelectProfile: (profileId: string) => void;
 };
 
-export function FamilyBoard({ data, activeProfileId, onSelectProfile }: Props) {
+export function FamilyBoard({ data, activeProfileId, currentUserId, onSelectProfile }: Props) {
   if (data.profiles.length === 0) {
     return (
       <section className="card">
@@ -42,7 +44,12 @@ export function FamilyBoard({ data, activeProfileId, onSelectProfile }: Props) {
                 pixelSize={4}
                 animate={false}
               />
-              <span className="family-name">{profile.displayName}</span>
+              <span className="family-name">
+                {profile.displayName}
+                {currentUserId !== null && profile.ownerId === currentUserId && (
+                  <span className="family-mine">じぶん</span>
+                )}
+              </span>
               <span className="family-character">{profile.characterName}</span>
               <span className="family-stage">
                 Lv.{view.character.growthStage + 1}「{GROWTH_STAGE_NAMES[view.character.growthStage]}」

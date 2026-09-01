@@ -57,6 +57,8 @@ export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
 export type Profile = {
   id: string;
   groupId: string;
+  /** このプロフィールを作ったアカウントの ID。共有していないときは null */
+  ownerId: string | null;
   displayName: string;
   /** 生年月日。未入力なら ageYears を使う */
   birthDate: string | null;
