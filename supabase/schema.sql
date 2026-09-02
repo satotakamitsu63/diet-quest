@@ -93,6 +93,9 @@ as $$
 declare
   target_group uuid;
 begin
+  if auth.uid() is null then
+    raise exception 'ログインしていません。先にログインしてください';
+  end if;
   select id into target_group from public.family_groups where invite_code = upper(code);
   if target_group is null then
     raise exception '合言葉に一致する家族グループが見つかりません';
@@ -114,6 +117,9 @@ as $$
 declare
   new_group uuid;
 begin
+  if auth.uid() is null then
+    raise exception 'ログインしていません。先にログインしてください';
+  end if;
   insert into public.family_groups (name, invite_code)
   values (group_name, upper(code))
   returning id into new_group;
