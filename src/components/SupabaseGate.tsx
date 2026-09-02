@@ -6,7 +6,8 @@ export const GROUP_ID_STORAGE_KEY = 'diet-quest:group-id';
 /** 共有せずこの端末だけで使う、と選んだことを覚えておく。 */
 export const FORCE_LOCAL_STORAGE_KEY = 'diet-quest:force-local';
 
-type Stage = 'checking' | 'signedOut' | 'linkSent' | 'chooseGroup';
+type Stage = 'checking' | 'signedOut' | 'chooseGroup';
+type AuthMode = 'signIn' | 'signUp';
 
 type MembershipRow = { group_id: string; family_groups: { name: string; invite_code: string } | null };
 
@@ -19,6 +20,8 @@ type Props = { onReady: () => void };
 export function SupabaseGate({ onReady }: Props) {
   const [stage, setStage] = useState<Stage>('checking');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<AuthMode>('signUp');
   const [groupName, setGroupName] = useState('わが家');
   const [inviteCode, setInviteCode] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -53,18 +56,50 @@ export function SupabaseGate({ onReady }: Props) {
     return () => listener.subscription.unsubscribe();
   }, [findExistingGroup]);
 
-  async function handleSendLink() {
-    if (!supabase || !email.trim()) return;
+  /** Supabase が返す英語のエラーを、そのまま出しても分からないので言い換える。 */
+  function describeAuthError(rawMessage: string): string {
+    const text = rawMessage.toLowerCase();
+    if (text.includes('invalid login credentials')) {
+      return 'メールアドレスかパスワードが違います。はじめての方は「はじめて使う」を選んでください。';
+    }
+    if (text.includes('already registered') || text.includes('already been registered')) {
+      return 'このメールアドレスは登録済みです。「ログイン」に切り替えてください。';
+    }
+    if (text.includes('password should be at least')) {
+      return 'パスワードは6文字以上にしてください。';
+    }
+    if (text.includes('email address') && text.includes('invalid')) {
+      return 'メールアドレスの形式が正しくありません。';
+    }
+    if (text.includes('rate limit') || text.includes('too many')) {
+      return '短時間に試しすぎました。少し待ってからもう一度お願いします。';
+    }
+    return rawMessage;
+  }
+
+  async function handleSubmit() {
+    if (!supabase || !email.trim() || password.length === 0) return;
     setIsWorking(true);
     setMessage(null);
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      // オリジンだけだと /diet-quest/ のようなサブパス配信で戻り先が 404 になる
-      options: { emailRedirectTo: new URL(import.meta.env.BASE_URL, window.location.origin).href },
-    });
+    const credentials = { email: email.trim(), password };
+    const { data, error } =
+      authMode === 'signUp'
+        ? await supabase.auth.signUp(credentials)
+        : await supabase.auth.signInWithPassword(credentials);
     setIsWorking(false);
-    if (error) setMessage(`ログイン用のメールを送れませんでした：${error.message}`);
-    else setStage('linkSent');
+
+    if (error) {
+      setMessage(describeAuthError(error.message));
+      return;
+    }
+    if (!data.session) {
+      // 確認メールを必須にしたままだと、ここに来て先へ進めない
+      setMessage(
+        '登録はできましたが、ログインが完了しませんでした。Supabase の Authentication > Providers > Email で「Confirm email」をオフにしてください。',
+      );
+      return;
+    }
+    // ログインできたら onAuthStateChange が拾って次へ進む
   }
 
   async function handleCreateGroup() {
@@ -111,31 +146,66 @@ export function SupabaseGate({ onReady }: Props) {
 
       {stage === 'signedOut' && (
         <section className="card">
-          <h2 className="card-title">ログイン</h2>
+          <h2 className="card-title">{authMode === 'signUp' ? 'アカウントを作る' : 'ログイン'}</h2>
+
+          <div className="chip-row">
+            <button
+              type="button"
+              className={authMode === 'signUp' ? 'chip is-active' : 'chip'}
+              onClick={() => {
+                setAuthMode('signUp');
+                setMessage(null);
+              }}
+            >
+              はじめて使う
+            </button>
+            <button
+              type="button"
+              className={authMode === 'signIn' ? 'chip is-active' : 'chip'}
+              onClick={() => {
+                setAuthMode('signIn');
+                setMessage(null);
+              }}
+            >
+              ログイン
+            </button>
+          </div>
+
           <p className="note">
-            ひとり1つのアカウントを作ります。メールアドレスを入れるとログイン用のリンクが届くので、
-            それを開けば完了です。パスワードは決めなくてかまいません。
+            ひとり1つのアカウントを作ります。メールは送られないので、確認の手間はありません。
+            一度作れば、機種変更しても同じアドレスとパスワードで記録がそのまま戻ります。
           </p>
           <p className="note">
-            一度ログインすれば、その端末では次から入力は要りません。機種変更のときは同じ
-            メールアドレスでログインし直せば、記録もキャラクターもそのまま戻ります。
+            <strong>パスワードは必ず控えてください。</strong>
+            メールを送らない設定のため、忘れた場合に再設定できません。
           </p>
-          <p className="note">
-            子どものぶんのメールアドレスが無いときは、保護者のアドレスに <code>+</code> と名前を
-            足したもの（例：<code>oya+yui@gmail.com</code>）が使えます。別のアカウントとして扱われますが、
-            リンクは保護者の受信箱に届きます。
-          </p>
+
           <label className="field">
             <span>メールアドレス</span>
             <input
               type="email"
+              autoComplete="username"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
               placeholder="you@example.com"
             />
           </label>
-          <button type="button" className="primary-button" onClick={handleSendLink} disabled={isWorking}>
-            {isWorking ? '送信中…' : 'ログイン用のリンクを送る'}
+          <label className="field">
+            <span>パスワード（6文字以上）</span>
+            <input
+              type="password"
+              autoComplete={authMode === 'signUp' ? 'new-password' : 'current-password'}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={handleSubmit}
+            disabled={isWorking || !email.trim() || password.length < 6}
+          >
+            {isWorking ? '処理中…' : authMode === 'signUp' ? 'アカウントを作る' : 'ログイン'}
           </button>
           <button
             type="button"
@@ -148,13 +218,6 @@ export function SupabaseGate({ onReady }: Props) {
           >
             共有せず、この端末だけで使う
           </button>
-        </section>
-      )}
-
-      {stage === 'linkSent' && (
-        <section className="card">
-          <h2 className="card-title">メールを確認してください</h2>
-          <p className="note">{email} にログイン用のリンクを送りました。リンクを開くと続きに進みます。</p>
         </section>
       )}
 
