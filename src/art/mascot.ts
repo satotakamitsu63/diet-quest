@@ -36,6 +36,117 @@ function lerp(from: number, to: number, ratio: number): number {
   return from + (to - from) * Math.min(1, Math.max(0, ratio));
 }
 
+/**
+ * 頂点の並びから、なめらかに閉じた輪郭パスをつくる。各頂点を制御点にして
+ * 隣り合う辺の中点どうしを結ぶので、頂点をどれだけ動かしても角が立たない。
+ * 頭に鼻づらを食い込ませるなど、1本の輪郭で顔の凹凸を表すのに使う。
+ */
+function smoothClosedPath(points: Array<[number, number]>): string {
+  const count = points.length;
+  const midpoint = (a: [number, number], b: [number, number]): [number, number] => [
+    (a[0] + b[0]) / 2,
+    (a[1] + b[1]) / 2,
+  ];
+  const startMid = midpoint(points[count - 1], points[0]);
+  const segments = [`M${startMid[0].toFixed(1)},${startMid[1].toFixed(1)}`];
+  for (let index = 0; index < count; index += 1) {
+    const point = points[index];
+    const next = points[(index + 1) % count];
+    const mid = midpoint(point, next);
+    segments.push(`Q${point[0].toFixed(1)},${point[1].toFixed(1)} ${mid[0].toFixed(1)},${mid[1].toFixed(1)}`);
+  }
+  return `${segments.join(' ')} Z`;
+}
+
+/** 正規化した頂点（中心からの倍率）を、実際の座標に展開してから輪郭パスにする。 */
+function silhouettePath(
+  centerX: number,
+  centerY: number,
+  radiusX: number,
+  radiusY: number,
+  normalizedPoints: ReadonlyArray<readonly [number, number]>,
+): string {
+  return smoothClosedPath(normalizedPoints.map(([nx, ny]) => [centerX + nx * radiusX, centerY + ny * radiusY]));
+}
+
+/**
+ * 種族ごとの頭のシルエット（鼻づらを含めて1本の輪郭にする）。
+ * -1〜1くらいの倍率で、頭の中心からの相対位置を表す。yは下がプラス。
+ */
+const HEAD_SILHOUETTES: Record<CharacterSpecies, ReadonlyArray<readonly [number, number]>> = {
+  cat: [
+    [0, -1], [0.68, -0.75], [0.98, -0.05], [0.82, 0.55],
+    [0.4, 0.95], [0, 1.08], [-0.4, 0.95],
+    [-0.82, 0.55], [-0.98, -0.05], [-0.68, -0.75],
+  ],
+  dog: [
+    [0, -1], [0.7, -0.72], [1, -0.05], [0.78, 0.42],
+    [0.55, 0.82], [0.22, 1.26], [-0.22, 1.26], [-0.55, 0.82],
+    [-0.78, 0.42], [-1, -0.05], [-0.7, -0.72],
+  ],
+  rabbit: [
+    [0, -1], [0.72, -0.74], [0.96, 0], [0.78, 0.6],
+    [0.32, 0.96], [0, 1.05], [-0.32, 0.96],
+    [-0.78, 0.6], [-0.96, 0], [-0.72, -0.74],
+  ],
+  bear: [
+    [0, -0.98], [0.76, -0.68], [1.06, 0], [0.92, 0.5],
+    [0.55, 0.86], [0, 1.16], [-0.55, 0.86],
+    [-0.92, 0.5], [-1.06, 0], [-0.76, -0.68],
+  ],
+  penguin: [
+    [0, -1], [0.72, -0.72], [0.98, 0], [0.72, 0.72],
+    [0, 1], [-0.72, 0.72], [-0.98, 0], [-0.72, -0.72],
+  ],
+  dragon: [
+    [0.34, -1.05], [0.72, -0.68], [0.96, -0.1], [0.7, 0.5],
+    [0.4, 0.92], [0, 1.3], [-0.4, 0.92],
+    [-0.7, 0.5], [-0.96, -0.1], [-0.72, -0.68], [-0.34, -1.05],
+  ],
+};
+
+/** 頭の輪郭のうち、鼻先がどこまで伸びているか（muzzleYの基準に使う）。 */
+const HEAD_SNOUT_DEPTH: Record<CharacterSpecies, number> = {
+  cat: 1.02, dog: 1.18, rabbit: 0.98, bear: 1.06, penguin: 0.9, dragon: 1.15,
+};
+
+/**
+ * 種族ごとの胴のシルエット。哺乳類は座った動物らしい「腰」のふくらみを、
+ * ぺんぎんは足の見えない縦長のたまご形にする。
+ */
+const BODY_SILHOUETTES: Record<CharacterSpecies, ReadonlyArray<readonly [number, number]>> = {
+  cat: [
+    [0, -1], [0.72, -0.82], [0.92, -0.32], [0.8, 0.2],
+    [0.95, 0.7], [0.5, 1], [0, 1.05], [-0.5, 1],
+    [-0.95, 0.7], [-0.8, 0.2], [-0.92, -0.32], [-0.72, -0.82],
+  ],
+  dog: [
+    [0, -1], [0.78, -0.8], [0.98, -0.3], [0.86, 0.22],
+    [1, 0.72], [0.52, 1], [0, 1.05], [-0.52, 1],
+    [-1, 0.72], [-0.86, 0.22], [-0.98, -0.3], [-0.78, -0.8],
+  ],
+  rabbit: [
+    [0, -1], [0.66, -0.84], [0.85, -0.35], [0.72, 0.18],
+    [0.88, 0.72], [0.46, 1.02], [0, 1.08], [-0.46, 1.02],
+    [-0.88, 0.72], [-0.72, 0.18], [-0.85, -0.35], [-0.66, -0.84],
+  ],
+  bear: [
+    [0, -1], [0.85, -0.8], [1.04, -0.28], [0.92, 0.22],
+    [1.08, 0.72], [0.56, 1], [0, 1.04], [-0.56, 1],
+    [-1.08, 0.72], [-0.92, 0.22], [-1.04, -0.28], [-0.85, -0.8],
+  ],
+  penguin: [
+    [0, -1], [0.62, -0.9], [0.95, -0.15], [0.86, 0.55],
+    [0.42, 0.96], [0, 1.05], [-0.42, 0.96],
+    [-0.86, 0.55], [-0.95, -0.15], [-0.62, -0.9],
+  ],
+  dragon: [
+    [0, -1], [0.66, -0.86], [0.9, -0.15], [0.8, 0.5],
+    [0.38, 0.94], [0, 1.02], [-0.38, 0.94],
+    [-0.8, 0.5], [-0.9, -0.15], [-0.66, -0.86],
+  ],
+};
+
 type EarStyle = 'pointed' | 'floppy' | 'tall' | 'round' | 'none' | 'horns';
 type TailStyle = 'long' | 'stubby' | 'puff' | 'tiny' | 'none' | 'spiky';
 /** 目のかたち。種族ごとの見分けやすさは、これがいちばん効く。 */
@@ -274,13 +385,10 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
     { kind: 'ellipse', cx: CENTER_X + bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: footColor, stroked: true },
   );
 
-  // ---- 胴 ----
+  // ---- 胴。楕円ではなく種族ごとのシルエットにする ----
   shapes.push({
-    kind: 'ellipse',
-    cx: CENTER_X,
-    cy: bodyCenterY,
-    rx: bodyHalfWidth,
-    ry: bodyRadiusY,
+    kind: 'path',
+    d: silhouettePath(CENTER_X, bodyCenterY, bodyHalfWidth, bodyRadiusY, BODY_SILHOUETTES[species]),
     fill: `url(#${bodyGradientId})`,
     stroked: true,
   });
@@ -339,13 +447,10 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
   // ---- 耳（頭より奥） ----
   pushEars(shapes, palette, traits.ears, CENTER_X, headRadiusX, headCenterY, headRadiusY, droop, scale, outlineWidth);
 
-  // ---- 頭 ----
+  // ---- 頭。鼻づらを含めて1本の輪郭にする（種族の見分けやすさの要） ----
   shapes.push({
-    kind: 'ellipse',
-    cx: CENTER_X,
-    cy: headCenterY,
-    rx: headRadiusX,
-    ry: headRadiusY,
+    kind: 'path',
+    d: silhouettePath(CENTER_X, headCenterY, headRadiusX, headRadiusY, HEAD_SILHOUETTES[species]),
     fill: `url(#${bodyGradientId})`,
     stroked: true,
   });
@@ -418,7 +523,8 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
     }
   }
 
-  const muzzleY = headCenterY + headRadiusY * 0.46;
+  // 鼻づらの位置は、頭の輪郭が実際にどこまで伸びているか（HEAD_SNOUT_DEPTH）を基準にする
+  const muzzleY = headCenterY + headRadiusY * (HEAD_SNOUT_DEPTH[species] * 0.62);
   pushMuzzle(shapes, palette, traits.muzzle, traits.hasWhiskers, traits.hasBuckTeeth, CENTER_X, muzzleY, scale, outlineWidth);
   pushMouth(shapes, palette, effectiveMouth, species, CENTER_X, muzzleY + headRadiusY * 0.24, scale);
 
@@ -768,22 +874,24 @@ function pushMuzzle(
   }
 
   if (kind === 'dogSnout') {
-    // 前に張り出した、いぬらしい鼻づら
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 4 * scale, rx: 9 * scale, ry: 6.4 * scale, fill: palette.light, stroked: true });
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.2 * scale, rx: 2.6 * scale, ry: 2 * scale, fill: palette.eyeDark, stroked: true });
+    // 頭の輪郭にすでに鼻づらの出っ張りがあるので、ここでは内側の色だけ足す
+    // （二重の輪郭線を描かない）
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 2.6 * scale, rx: 7.6 * scale, ry: 5.2 * scale, fill: palette.light });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 5.6 * scale, rx: 2.6 * scale, ry: 2 * scale, fill: palette.eyeDark, stroked: true });
     return;
   }
 
   if (kind === 'bearRound') {
-    // まるい、くまらしい鼻先パッチ
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 3 * scale, rx: 7.6 * scale, ry: 6.4 * scale, fill: palette.light, stroked: true });
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1 * scale, rx: 2.4 * scale, ry: 1.8 * scale, fill: palette.eyeDark, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.6 * scale, rx: 6.6 * scale, ry: 5.4 * scale, fill: palette.light });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 4 * scale, rx: 2.4 * scale, ry: 1.8 * scale, fill: palette.eyeDark, stroked: true });
     return;
   }
 
   if (kind === 'dragonSnout') {
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 2.6 * scale, rx: 7.6 * scale, ry: 4.6 * scale, fill: palette.light, stroked: true });
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 0.6 * scale, rx: 1.6 * scale, ry: 1.2 * scale, fill: palette.deepShade });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.6 * scale, rx: 6.4 * scale, ry: 3.8 * scale, fill: palette.light });
+    for (const direction of [-1, 1]) {
+      shapes.push({ kind: 'ellipse', cx: centerX + direction * 2 * scale, cy: muzzleY + 3.2 * scale, rx: 0.7 * scale, ry: 1 * scale, fill: palette.deepShade });
+    }
     return;
   }
 
