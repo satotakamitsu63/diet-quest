@@ -29,7 +29,6 @@ export type MascotArtwork = {
   outlineWidth: number;
   /** 背景から前面へ、描く順に並んでいる */
   shapes: MascotShape[];
-  /** body/head の塗りに使うグラデーションの id */
   bodyGradientId: string;
 };
 
@@ -38,25 +37,60 @@ function lerp(from: number, to: number, ratio: number): number {
 }
 
 type EarStyle = 'pointed' | 'floppy' | 'tall' | 'round' | 'none' | 'horns';
-type MuzzleStyle = 'small' | 'long' | 'beak';
 type TailStyle = 'long' | 'stubby' | 'puff' | 'tiny' | 'none' | 'spiky';
+/** 目のかたち。種族ごとの見分けやすさは、これがいちばん効く。 */
+type EyeShape = 'almond' | 'roundBig' | 'roundSmall' | 'simple' | 'slit';
+/** 鼻づら。種族の輪郭そのものを変える。 */
+type MuzzleKind = 'catSmall' | 'dogSnout' | 'rabbitSmall' | 'bearRound' | 'dragonSnout' | 'beak';
 
 type SpeciesTraits = {
   ears: EarStyle;
-  muzzle: MuzzleStyle;
   tail: TailStyle;
+  muzzle: MuzzleKind;
+  eyeShape: EyeShape;
+  /** 目の傾き（度）。＋であるほど目尻が上がる */
+  eyeTilt: number;
+  /** 目と目の間の開き方の倍率 */
+  eyeSpreadFactor: number;
   hasWhiskers: boolean;
-  hasBellyPatch: boolean;
+  /** ぺんぎんの白いお腹・顔まわりの二色づかい */
+  hasTwoTone: boolean;
   hasWings: boolean;
+  hasBuckTeeth: boolean;
+  hasSpineSpikes: boolean;
 };
 
 const SPECIES_TRAITS: Record<CharacterSpecies, SpeciesTraits> = {
-  cat: { ears: 'pointed', muzzle: 'small', tail: 'long', hasWhiskers: true, hasBellyPatch: false, hasWings: false },
-  dog: { ears: 'floppy', muzzle: 'long', tail: 'stubby', hasWhiskers: false, hasBellyPatch: false, hasWings: false },
-  rabbit: { ears: 'tall', muzzle: 'small', tail: 'puff', hasWhiskers: true, hasBellyPatch: false, hasWings: false },
-  bear: { ears: 'round', muzzle: 'long', tail: 'tiny', hasWhiskers: false, hasBellyPatch: false, hasWings: false },
-  penguin: { ears: 'none', muzzle: 'beak', tail: 'none', hasWhiskers: false, hasBellyPatch: true, hasWings: false },
-  dragon: { ears: 'horns', muzzle: 'long', tail: 'spiky', hasWhiskers: false, hasBellyPatch: false, hasWings: true },
+  cat: {
+    ears: 'pointed', tail: 'long', muzzle: 'catSmall',
+    eyeShape: 'almond', eyeTilt: 11, eyeSpreadFactor: 1,
+    hasWhiskers: true, hasTwoTone: false, hasWings: false, hasBuckTeeth: false, hasSpineSpikes: false,
+  },
+  dog: {
+    ears: 'floppy', tail: 'stubby', muzzle: 'dogSnout',
+    eyeShape: 'roundBig', eyeTilt: 0, eyeSpreadFactor: 0.92,
+    hasWhiskers: false, hasTwoTone: false, hasWings: false, hasBuckTeeth: false, hasSpineSpikes: false,
+  },
+  rabbit: {
+    ears: 'tall', tail: 'puff', muzzle: 'rabbitSmall',
+    eyeShape: 'roundBig', eyeTilt: 0, eyeSpreadFactor: 1,
+    hasWhiskers: true, hasTwoTone: false, hasWings: false, hasBuckTeeth: true, hasSpineSpikes: false,
+  },
+  bear: {
+    ears: 'round', tail: 'tiny', muzzle: 'bearRound',
+    eyeShape: 'roundSmall', eyeTilt: 0, eyeSpreadFactor: 0.86,
+    hasWhiskers: false, hasTwoTone: false, hasWings: false, hasBuckTeeth: false, hasSpineSpikes: false,
+  },
+  penguin: {
+    ears: 'none', tail: 'none', muzzle: 'beak',
+    eyeShape: 'simple', eyeTilt: 0, eyeSpreadFactor: 0.9,
+    hasWhiskers: false, hasTwoTone: true, hasWings: false, hasBuckTeeth: false, hasSpineSpikes: false,
+  },
+  dragon: {
+    ears: 'horns', tail: 'spiky', muzzle: 'dragonSnout',
+    eyeShape: 'slit', eyeTilt: 8, eyeSpreadFactor: 1,
+    hasWhiskers: false, hasTwoTone: false, hasWings: true, hasBuckTeeth: false, hasSpineSpikes: true,
+  },
 };
 
 type EyeStyle = 'droopy' | 'round' | 'sparkle' | 'hero';
@@ -78,6 +112,8 @@ type StageLook = {
 /**
  * 10段階の見た目テーブル。よれよれ→かわいい→かっこいいの流れが
  * ひと目で伝わるよう、色だけでなく形・表情・演出を段階ごとに変える。
+ * eyes が 'hero' の2段階だけは、種族を問わず共通の凛々しい目に差し替わる
+ * （最終段階は動物らしさより「かっこよさ」を優先してよいため）。
  */
 const STAGE_LOOKS: StageLook[] = [
   { scale: 0.82, coatMix: 0.0, eyes: 'droopy', mouth: 'sad', blush: false, accessory: 'none', aura: 'none', bonusWings: false },
@@ -88,8 +124,8 @@ const STAGE_LOOKS: StageLook[] = [
   { scale: 1.08, coatMix: 0.67, eyes: 'sparkle', mouth: 'smile', blush: true, accessory: 'ribbon', aura: 'none', bonusWings: false },
   { scale: 1.13, coatMix: 0.78, eyes: 'sparkle', mouth: 'smile', blush: true, accessory: 'ribbon', aura: 'sparkle', bonusWings: false },
   { scale: 1.18, coatMix: 0.88, eyes: 'sparkle', mouth: 'grin', blush: true, accessory: 'crown', aura: 'sparkle', bonusWings: false },
-  { scale: 1.24, coatMix: 0.96, eyes: 'hero', mouth: 'grin', blush: true, accessory: 'crownGem', aura: 'burstSmall', bonusWings: false },
-  { scale: 1.32, coatMix: 1.0, eyes: 'hero', mouth: 'grin', blush: true, accessory: 'crownGem', aura: 'burstBig', bonusWings: true },
+  { scale: 1.25, coatMix: 0.96, eyes: 'hero', mouth: 'grin', blush: false, accessory: 'crownGem', aura: 'burstSmall', bonusWings: false },
+  { scale: 1.34, coatMix: 1.0, eyes: 'hero', mouth: 'grin', blush: false, accessory: 'crownGem', aura: 'burstBig', bonusWings: true },
 ];
 
 export const GROWTH_STAGE_NAMES = [
@@ -123,16 +159,26 @@ function starPath(cx: number, cy: number, size: number): string {
   return `${points.join(' ')} Z`;
 }
 
-function teardropPath(originX: number, originY: number, dirX: number, length: number, width: number): string {
+/**
+ * 葉っぱのようになめらかな雫形。左右対称の2本の三次ベジェで閉じるので、
+ * 継ぎ目に折れ目が出ない。耳・尻尾・翼・とげに使う共通パーツ。
+ */
+function leafPath(originX: number, originY: number, dirX: number, length: number, width: number): string {
   const tipX = originX + dirX * length;
-  const tipY = originY - length * 0.35;
-  const c1x = originX + dirX * length * 0.35;
-  const c1y = originY - width;
-  const c2x = originX + dirX * length * 0.8;
-  const c2y = originY - width * 0.5;
-  const c3x = originX + dirX * length * 0.55;
-  const c3y = originY + width * 0.55;
-  return `M${originX.toFixed(1)},${originY.toFixed(1)} Q${c1x.toFixed(1)},${c1y.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)} Q${c2x.toFixed(1)},${c2y.toFixed(1)} ${c3x.toFixed(1)},${c3y.toFixed(1)} L${originX.toFixed(1)},${originY.toFixed(1)} Z`;
+  const tipY = originY - length * 0.28;
+  const c1x = originX + dirX * length * 0.32;
+  const c1y = originY - width * 1.05;
+  const c2x = originX + dirX * length * 0.78;
+  const c2y = tipY - width * 0.22;
+  const c3x = originX + dirX * length * 0.7;
+  const c3y = originY + width * 0.85;
+  const c4x = originX + dirX * length * 0.18;
+  const c4y = originY + width * 0.3;
+  return (
+    `M${originX.toFixed(1)},${originY.toFixed(1)} ` +
+    `C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)} ` +
+    `C${c3x.toFixed(1)},${c3y.toFixed(1)} ${c4x.toFixed(1)},${c4y.toFixed(1)} ${originX.toFixed(1)},${originY.toFixed(1)} Z`
+  );
 }
 
 export type MascotInput = {
@@ -163,6 +209,7 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
   const droop = isExhausted ? 1 : condition === 'tired' ? 0.5 : 0;
   const bounce = frame === 1 && !isExhausted ? -0.8 : 0;
   const scale = stageLook.scale;
+  const outlineWidth = 1.6 + scale * 0.6;
 
   const bodyHalfWidth = lerp(13, 31, shapeValue) * 0.86 * scale;
   const bodyRadiusY = lerp(16, 21.5, shapeValue) * scale;
@@ -198,18 +245,19 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
 
   // ---- 翼（胴より奥） ----
   if (hasWings) {
-    pushWings(shapes, palette, CENTER_X, bodyCenterY, bodyHalfWidth, scale, bounce);
+    pushWings(shapes, palette, CENTER_X, bodyCenterY, bodyHalfWidth, scale, bounce, outlineWidth);
   }
 
   // ---- 尻尾 ----
-  pushTail(shapes, palette, traits.tail, CENTER_X + bodyHalfWidth, bodyCenterY, scale, frame);
+  pushTail(shapes, palette, traits.tail, CENTER_X + bodyHalfWidth, bodyCenterY, scale, frame, outlineWidth);
 
   // ---- 足 ----
   const footRadius = lerp(4.2, 7, shapeValue) * scale;
   const footY = bodyCenterY + bodyRadiusY - footRadius * 0.5;
+  const footColor = species === 'penguin' ? palette.accessory : palette.shade;
   shapes.push(
-    { kind: 'ellipse', cx: CENTER_X - bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: palette.shade, stroked: true },
-    { kind: 'ellipse', cx: CENTER_X + bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: palette.shade, stroked: true },
+    { kind: 'ellipse', cx: CENTER_X - bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: footColor, stroked: true },
+    { kind: 'ellipse', cx: CENTER_X + bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: footColor, stroked: true },
   );
 
   // ---- 胴 ----
@@ -223,13 +271,27 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
     stroked: true,
   });
 
-  if (traits.hasBellyPatch) {
+  if (traits.hasSpineSpikes) {
+    for (let step = 0; step < 3; step += 1) {
+      const y = bodyCenterY - bodyRadiusY * (0.75 - step * 0.5);
+      shapes.push({
+        kind: 'path',
+        d: leafPath(CENTER_X, y, 1, 4.5 * scale, 1.6 * scale),
+        fill: palette.accessoryDark,
+        stroked: true,
+        opacity: 0.95,
+      });
+    }
+  }
+
+  if (traits.hasTwoTone) {
+    // ぺんぎんの白いお腹と顔まわり
     shapes.push({
       kind: 'ellipse',
       cx: CENTER_X,
-      cy: bodyCenterY + bodyRadiusY * 0.1,
-      rx: bodyHalfWidth * 0.72,
-      ry: bodyRadiusY * 0.85,
+      cy: bodyCenterY + bodyRadiusY * 0.15,
+      rx: bodyHalfWidth * 0.68,
+      ry: bodyRadiusY * 0.78,
       fill: palette.light,
     });
     for (const direction of [-1, 1]) {
@@ -239,7 +301,7 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
         cy: bodyCenterY,
         rx: 4.4 * scale,
         ry: 11 * scale,
-        fill: palette.shade,
+        fill: footColor,
         stroked: true,
         rotate: direction * 18,
       });
@@ -261,18 +323,28 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
   }
 
   // ---- 耳（頭より奥） ----
-  pushEars(shapes, palette, traits.ears, CENTER_X, headRadiusX, headCenterY, headRadiusY, droop, scale);
+  pushEars(shapes, palette, traits.ears, CENTER_X, headRadiusX, headCenterY, headRadiusY, droop, scale, outlineWidth);
 
   // ---- 頭 ----
+  const headWidthAdjust = traits.muzzle === 'bearRound' || traits.muzzle === 'dogSnout' ? 1.05 : 1;
   shapes.push({
     kind: 'ellipse',
     cx: CENTER_X,
     cy: headCenterY,
-    rx: headRadiusX,
+    rx: headRadiusX * headWidthAdjust,
     ry: headRadiusY,
     fill: `url(#${bodyGradientId})`,
     stroked: true,
   });
+
+  if (traits.hasSpineSpikes) {
+    shapes.push({
+      kind: 'path',
+      d: leafPath(CENTER_X, headCenterY - headRadiusY * 0.85, 1, 5 * scale, 1.7 * scale),
+      fill: palette.accessoryDark,
+      stroked: true,
+    });
+  }
 
   if (shapeValue > 0.7) {
     for (const direction of [-1, 1]) {
@@ -287,32 +359,58 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
     }
   }
 
+  if (traits.hasTwoTone) {
+    // 顔のまわりだけ白い、ぺんぎんの特徴
+    shapes.push({
+      kind: 'ellipse',
+      cx: CENTER_X,
+      cy: headCenterY + headRadiusY * 0.18,
+      rx: headRadiusX * 0.62,
+      ry: headRadiusY * 0.58,
+      fill: palette.light,
+    });
+  }
+
   // つやハイライト。トイのような光沢
   shapes.push({
     kind: 'ellipse',
     cx: CENTER_X - headRadiusX * 0.42,
     cy: headCenterY - headRadiusY * 0.52,
-    rx: headRadiusX * 0.34,
-    ry: headRadiusY * 0.22,
+    rx: headRadiusX * 0.3,
+    ry: headRadiusY * 0.18,
     fill: '#ffffff',
-    opacity: 0.55,
+    opacity: 0.5,
     rotate: -20,
   });
 
-  const eyeSpread = headRadiusX * 0.44;
+  const eyeSpread = headRadiusX * 0.44 * traits.eyeSpreadFactor;
   const eyeY = headCenterY - headRadiusY * 0.02;
   if (effectiveEyes === 'x') {
     pushExhaustedEyes(shapes, palette, CENTER_X - eyeSpread, CENTER_X + eyeSpread, eyeY, scale);
   } else {
-    pushEyes(shapes, palette, effectiveEyes, CENTER_X - eyeSpread, CENTER_X + eyeSpread, eyeY, scale);
+    pushEyes(shapes, palette, effectiveEyes, traits.eyeShape, traits.eyeTilt, CENTER_X - eyeSpread, CENTER_X + eyeSpread, eyeY, scale, outlineWidth);
+  }
+
+  if (traits.muzzle === 'dragonSnout') {
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: CENTER_X + direction * headRadiusX * 0.34,
+        cy: eyeY - headRadiusY * 0.62,
+        rx: headRadiusX * 0.1,
+        ry: headRadiusY * 0.06,
+        fill: palette.accessoryDark,
+        rotate: direction * 30,
+      });
+    }
   }
 
   const muzzleY = headCenterY + headRadiusY * 0.46;
-  pushMuzzle(shapes, palette, traits.muzzle, traits.hasWhiskers, CENTER_X, muzzleY, scale);
+  pushMuzzle(shapes, palette, traits.muzzle, traits.hasWhiskers, traits.hasBuckTeeth, CENTER_X, muzzleY, scale, outlineWidth);
   pushMouth(shapes, palette, effectiveMouth, species, CENTER_X, muzzleY + headRadiusY * 0.24, scale);
 
   // ---- 首まわりの飾り。あごのすぐ下、頭の前面に乗せる ----
-  pushNeckwear(shapes, palette, stageLook.accessory, CENTER_X, headCenterY + headRadiusY * 1.04, bodyHalfWidth, scale);
+  pushNeckwear(shapes, palette, stageLook.accessory, CENTER_X, headCenterY + headRadiusY * 1.04, bodyHalfWidth, scale, outlineWidth);
 
   if (effectiveBlush) {
     for (const direction of [-1, 1]) {
@@ -334,21 +432,21 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
       [CENTER_X + bodyHalfWidth * 0.45, bodyCenterY + 4, 3.2],
     ];
     for (const [x, y, radius] of patches) {
-      shapes.push({ kind: 'ellipse', cx: x, cy: y, rx: radius, ry: radius * 0.7, fill: palette.deepShade, opacity: 0.8 });
+      shapes.push({ kind: 'ellipse', cx: x, cy: y, rx: radius, ry: radius * 0.7, fill: palette.deepShade, opacity: 0.7 });
     }
     const tufts: Array<[number, number, number]> = [
-      [CENTER_X - headRadiusX - 1, headCenterY - headRadiusY + 3, -30],
-      [CENTER_X + headRadiusX + 1, headCenterY - headRadiusY + 6, 25],
-      [CENTER_X + 6, headCenterY - headRadiusY - 2, -12],
+      [CENTER_X - headRadiusX - 1, headCenterY - headRadiusY + 3, -1],
+      [CENTER_X + headRadiusX + 1, headCenterY - headRadiusY + 6, 1],
+      [CENTER_X + 6, headCenterY - headRadiusY - 2, -1],
     ];
-    for (const [x, y, angle] of tufts) {
-      shapes.push({ kind: 'path', d: teardropPath(x, y, angle > 0 ? 1 : -1, 6, 1.6), fill: palette.deepShade });
+    for (const [x, y, dir] of tufts) {
+      shapes.push({ kind: 'path', d: leafPath(x, y, dir, 6, 1.4), fill: palette.deepShade, opacity: 0.85 });
     }
   }
 
   const earsRiseUp = traits.ears === 'pointed' || traits.ears === 'tall';
   const crownBaseY = headCenterY - headRadiusY - (earsRiseUp ? 12 : 5) * scale + droop * 2;
-  pushCrown(shapes, palette, stageLook.accessory, CENTER_X, crownBaseY, scale);
+  pushCrown(shapes, palette, stageLook.accessory, CENTER_X, crownBaseY, scale, outlineWidth);
 
   if (isExhausted) {
     shapes.push({
@@ -362,7 +460,7 @@ export function buildMascotArtwork(input: MascotInput): MascotArtwork {
   return {
     viewBox: `0 0 ${VIEW_SIZE} ${VIEW_SIZE}`,
     outlineColor: palette.outline,
-    outlineWidth: 2.1,
+    outlineWidth,
     shapes,
     bodyGradientId,
   };
@@ -378,7 +476,9 @@ function pushEars(
   headRadiusY: number,
   droop: number,
   scale: number,
+  outlineWidth: number,
 ): void {
+  void outlineWidth;
   const headTop = headCenterY - headRadiusY;
   const leftX = headCenterX - headRadiusX * 0.6;
   const rightX = headCenterX + headRadiusX * 0.6;
@@ -386,8 +486,8 @@ function pushEars(
   if (style === 'pointed') {
     const apexY = headTop + 4 * scale + droop * 4;
     for (const [x, dir] of [[leftX, -1] as const, [rightX, 1] as const]) {
-      shapes.push({ kind: 'path', d: teardropPath(x, apexY, dir, 15 * scale, 6.5 * scale), fill: palette.base, stroked: true });
-      shapes.push({ kind: 'path', d: teardropPath(x, apexY - 1, dir, 9 * scale, 3.4 * scale), fill: palette.nose });
+      shapes.push({ kind: 'path', d: leafPath(x, apexY, dir, 15 * scale, 6.5 * scale), fill: palette.base, stroked: true });
+      shapes.push({ kind: 'path', d: leafPath(x, apexY - 1, dir, 9 * scale, 3.2 * scale), fill: palette.nose });
     }
     return;
   }
@@ -397,20 +497,20 @@ function pushEars(
     for (const direction of [-1, 1]) {
       shapes.push({
         kind: 'ellipse',
-        cx: headCenterX + direction * (headRadiusX + 2),
+        cx: headCenterX + direction * (headRadiusX + 1),
         cy: earTop + 12 * scale,
-        rx: 8 * scale,
-        ry: 15 * scale,
+        rx: 7.4 * scale,
+        ry: 14 * scale,
         fill: palette.shade,
         stroked: true,
         rotate: direction * 12,
       });
       shapes.push({
         kind: 'ellipse',
-        cx: headCenterX + direction * (headRadiusX + 2),
+        cx: headCenterX + direction * (headRadiusX + 1),
         cy: earTop + 12 * scale,
-        rx: 4 * scale,
-        ry: 10 * scale,
+        rx: 3.6 * scale,
+        ry: 9 * scale,
         fill: palette.deepShade,
         rotate: direction * 12,
       });
@@ -420,14 +520,14 @@ function pushEars(
 
   if (style === 'tall') {
     const lean = droop * 5;
-    const earHeight = 24 * scale;
+    const earHeight = 25 * scale;
     for (const direction of [-1, 1]) {
       const baseX = headCenterX + direction * 8 * scale;
       shapes.push({
         kind: 'ellipse',
         cx: baseX + direction * lean * 0.4,
         cy: headTop - earHeight * 0.42,
-        rx: 4.4 * scale,
+        rx: 4.2 * scale,
         ry: earHeight * 0.55,
         fill: palette.base,
         stroked: true,
@@ -437,7 +537,7 @@ function pushEars(
         kind: 'ellipse',
         cx: baseX + direction * lean * 0.4,
         cy: headTop - earHeight * 0.4,
-        rx: 2 * scale,
+        rx: 1.9 * scale,
         ry: earHeight * 0.4,
         fill: palette.nose,
         rotate: direction * (6 + lean),
@@ -448,8 +548,8 @@ function pushEars(
 
   if (style === 'round') {
     for (const [x, dir] of [[leftX, -1] as const, [rightX, 1] as const]) {
-      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 8 * scale, fill: palette.base, stroked: true });
-      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 3.6 * scale, fill: palette.nose });
+      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 7.6 * scale, fill: palette.base, stroked: true });
+      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 3.3 * scale, fill: palette.nose });
     }
     return;
   }
@@ -458,7 +558,7 @@ function pushEars(
     for (const direction of [-1, 1]) {
       shapes.push({
         kind: 'path',
-        d: teardropPath(headCenterX + direction * 9 * scale, headTop + 4 * scale, direction, 13 * scale, 3.6 * scale),
+        d: leafPath(headCenterX + direction * 9 * scale, headTop + 4 * scale, direction, 13 * scale, 3.2 * scale),
         fill: palette.accessoryDark,
         stroked: true,
       });
@@ -466,53 +566,99 @@ function pushEars(
   }
 }
 
+/** 目のかたちに、種族の見分けやすさをいちばん強く持たせる。 */
 function pushEyes(
   shapes: MascotShape[],
   palette: Palette,
   style: EyeStyle,
+  eyeShape: EyeShape,
+  tilt: number,
   leftEyeX: number,
   rightEyeX: number,
   eyeY: number,
   scale: number,
+  outlineWidth: number,
 ): void {
   if (style === 'droopy') {
+    // 眠そうに半分閉じた目。暗い影を重ねず、やさしい弧の線1本だけで表す
+    const half = 5.2 * scale;
+    const bow = 2.6 * scale;
     for (const eyeX of [leftEyeX, rightEyeX]) {
-      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + 1.5, rx: 5.6 * scale, ry: 2.6 * scale, fill: palette.eyeDark, opacity: 0.85 });
       shapes.push({
         kind: 'path',
-        d: `M${(eyeX - 5.6 * scale).toFixed(1)},${eyeY.toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 3 * scale).toFixed(1)} ${(eyeX + 5.6 * scale).toFixed(1)},${eyeY.toFixed(1)} L${(eyeX + 5.6 * scale).toFixed(1)},${(eyeY + 1.2).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 1.2 * scale).toFixed(1)} ${(eyeX - 5.6 * scale).toFixed(1)},${(eyeY + 1.2).toFixed(1)} Z`,
-        fill: palette.outline,
+        d: `M${(eyeX - half).toFixed(1)},${eyeY.toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY + bow).toFixed(1)} ${(eyeX + half).toFixed(1)},${eyeY.toFixed(1)}`,
+        fill: 'none',
+        stroked: true,
       });
-      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + 8.2 * scale, rx: 5.2 * scale, ry: 2.4 * scale, fill: palette.deepShade, opacity: 0.55 });
     }
     return;
   }
 
   if (style === 'hero') {
+    // 最終段階だけの、種族を問わない共通の凛々しい目
     for (const eyeX of [leftEyeX, rightEyeX]) {
       const direction = eyeX < CENTER_X ? -1 : 1;
-      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx: 6.8 * scale, ry: 4.8 * scale, fill: palette.eyeDark, stroked: true, rotate: -direction * 8 });
-      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 1, cy: eyeY, rx: 5.4 * scale, ry: 3.7 * scale, fill: palette.eye, rotate: -direction * 8 });
-      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 2.4, cy: eyeY - 1, rx: 1.6 * scale, ry: 2.3 * scale, fill: palette.eyeHighlight });
+      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx: 6.4 * scale, ry: 4.6 * scale, fill: palette.eyeDark, stroked: true, rotate: -direction * 6 });
+      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 0.8, cy: eyeY, rx: 5 * scale, ry: 3.5 * scale, fill: palette.eye, rotate: -direction * 6 });
+      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 1.8, cy: eyeY - 1, rx: 1.5 * scale, ry: 2.1 * scale, fill: palette.eyeHighlight });
+      // 少しだけ吊り上がった、決意を感じさせるまぶた
       shapes.push({
         kind: 'path',
-        d: `M${(eyeX - 6.4 * scale).toFixed(1)},${(eyeY - 7.5 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 10.5 * scale).toFixed(1)} ${(eyeX + 6.4 * scale).toFixed(1)},${(eyeY - 6.5 * scale).toFixed(1)} L${(eyeX + 6 * scale).toFixed(1)},${(eyeY - 4.6 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 8.2 * scale).toFixed(1)} ${(eyeX - 6 * scale).toFixed(1)},${(eyeY - 5.6 * scale).toFixed(1)} Z`,
+        d: `M${(eyeX - 6.2 * scale).toFixed(1)},${(eyeY - 3.4 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 6.4 * scale).toFixed(1)} ${(eyeX + 6.2 * scale).toFixed(1)},${(eyeY - direction * 1.6 * scale).toFixed(1)} L${(eyeX + 5.6 * scale).toFixed(1)},${(eyeY - direction * 0.2 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 4 * scale).toFixed(1)} ${(eyeX - 5.6 * scale).toFixed(1)},${(eyeY - 1.6 * scale).toFixed(1)} Z`,
         fill: palette.deepShade,
       });
     }
     return;
   }
 
-  const radius = style === 'sparkle' ? 8.4 * scale : 7.1 * scale;
+  if (eyeShape === 'simple') {
+    // ぺんぎんの、つぶらでシンプルな目
+    const radius = (style === 'sparkle' ? 4.6 : 4.1) * scale;
+    for (const eyeX of [leftEyeX, rightEyeX]) {
+      shapes.push({ kind: 'circle', cx: eyeX, cy: eyeY, r: radius, fill: palette.eyeDark });
+      shapes.push({ kind: 'circle', cx: eyeX - radius * 0.32, cy: eyeY - radius * 0.34, r: radius * 0.34, fill: palette.eyeHighlight });
+    }
+    return;
+  }
+
+  const baseRadius = style === 'sparkle' ? 7.6 * scale : 6.6 * scale;
+  const shapeRatio: Record<EyeShape, { rx: number; ry: number }> = {
+    almond: { rx: 1.12, ry: 0.82 },
+    roundBig: { rx: 1.08, ry: 1.12 },
+    roundSmall: { rx: 0.86, ry: 0.9 },
+    simple: { rx: 1, ry: 1 },
+    slit: { rx: 0.68, ry: 1.22 },
+  };
+  const ratio = shapeRatio[eyeShape];
+  const rx = baseRadius * ratio.rx;
+  const ry = baseRadius * ratio.ry;
+
   for (const eyeX of [leftEyeX, rightEyeX]) {
-    shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx: radius, ry: radius * 1.14, fill: palette.eyeDark, stroked: true });
-    shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + radius * 0.14, rx: radius * 0.76, ry: radius * 0.86, fill: palette.eye });
-    shapes.push({ kind: 'ellipse', cx: eyeX - radius * 0.3, cy: eyeY - radius * 0.36, rx: radius * 0.4, ry: radius * 0.46, fill: palette.eyeHighlight });
+    const direction = eyeX < CENTER_X ? -1 : 1;
+    const rotate = tilt * direction * -1;
+    shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx, ry, fill: palette.eyeDark, stroked: true, rotate });
+    shapes.push({
+      kind: 'ellipse',
+      cx: eyeX,
+      cy: eyeY + ry * 0.16,
+      rx: rx * 0.72,
+      ry: ry * 0.82,
+      fill: palette.eye,
+      rotate,
+    });
+    shapes.push({
+      kind: 'ellipse',
+      cx: eyeX - rx * 0.28,
+      cy: eyeY - ry * 0.32,
+      rx: rx * 0.34,
+      ry: ry * 0.4,
+      fill: palette.eyeHighlight,
+    });
     if (style === 'sparkle') {
-      shapes.push({ kind: 'ellipse', cx: eyeX + radius * 0.4, cy: eyeY + radius * 0.3, rx: radius * 0.16, ry: radius * 0.18, fill: palette.eyeHighlight });
-      shapes.push({ kind: 'ellipse', cx: eyeX - radius * 0.05, cy: eyeY + radius * 0.55, rx: radius * 0.12, ry: radius * 0.12, fill: palette.eyeHighlight, opacity: 0.8 });
+      shapes.push({ kind: 'ellipse', cx: eyeX + rx * 0.36, cy: eyeY + ry * 0.32, rx: rx * 0.15, ry: ry * 0.16, fill: palette.eyeHighlight, opacity: 0.9 });
     }
   }
+  void outlineWidth;
 }
 
 function pushExhaustedEyes(
@@ -523,10 +669,10 @@ function pushExhaustedEyes(
   eyeY: number,
   scale: number,
 ): void {
-  const half = 5.4 * scale;
+  const half = 5 * scale;
   for (const eyeX of [leftEyeX, rightEyeX]) {
-    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY - half, x2: eyeX + half, y2: eyeY + half, stroke: palette.outline, width: 2.4 * scale });
-    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY + half, x2: eyeX + half, y2: eyeY - half, stroke: palette.outline, width: 2.4 * scale });
+    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY - half, x2: eyeX + half, y2: eyeY + half, stroke: palette.outline, width: 2.2 * scale });
+    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY + half, x2: eyeX + half, y2: eyeY - half, stroke: palette.outline, width: 2.2 * scale });
   }
 }
 
@@ -542,8 +688,8 @@ function pushMouth(
   if (species === 'penguin' && style !== 'grin') return;
 
   if (style === 'sad') {
-    shapes.push({ kind: 'line', x1: centerX - 6.2 * scale, y1: mouthY + 2.2 * scale, x2: centerX, y2: mouthY - 2.4 * scale, stroke: palette.outline, width: 2.3 * scale });
-    shapes.push({ kind: 'line', x1: centerX + 6.2 * scale, y1: mouthY + 2.2 * scale, x2: centerX, y2: mouthY - 2.4 * scale, stroke: palette.outline, width: 2.3 * scale });
+    shapes.push({ kind: 'line', x1: centerX - 5.6 * scale, y1: mouthY + 2 * scale, x2: centerX, y2: mouthY - 2 * scale, stroke: palette.outline, width: 2 * scale });
+    shapes.push({ kind: 'line', x1: centerX + 5.6 * scale, y1: mouthY + 2 * scale, x2: centerX, y2: mouthY - 2 * scale, stroke: palette.outline, width: 2 * scale });
     return;
   }
 
@@ -563,71 +709,107 @@ function pushMouth(
   }
 
   // かわいい "w" のかたちの口。全種族に共通のチャームポイント
-  shapes.push({
-    kind: 'line',
-    x1: centerX - 6 * scale,
-    y1: mouthY - 2.2 * scale,
-    x2: centerX,
-    y2: mouthY + 0.4 * scale,
-    stroke: palette.outline,
-    width: 2.2 * scale,
-  });
-  shapes.push({
-    kind: 'line',
-    x1: centerX,
-    y1: mouthY + 0.4 * scale,
-    x2: centerX + 6 * scale,
-    y2: mouthY - 2.2 * scale,
-    stroke: palette.outline,
-    width: 2.2 * scale,
-  });
+  shapes.push({ kind: 'line', x1: centerX - 5.6 * scale, y1: mouthY - 2 * scale, x2: centerX, y2: mouthY + 0.4 * scale, stroke: palette.outline, width: 2 * scale });
+  shapes.push({ kind: 'line', x1: centerX, y1: mouthY + 0.4 * scale, x2: centerX + 5.6 * scale, y2: mouthY - 2 * scale, stroke: palette.outline, width: 2 * scale });
 }
 
 function pushMuzzle(
   shapes: MascotShape[],
   palette: Palette,
-  style: MuzzleStyle,
+  kind: MuzzleKind,
   hasWhiskers: boolean,
+  hasBuckTeeth: boolean,
   centerX: number,
   muzzleY: number,
   scale: number,
+  outlineWidth: number,
 ): void {
-  if (style === 'beak') {
+  void outlineWidth;
+
+  if (kind === 'beak') {
+    // ひし形の、はっきり目立つくちばし
+    const top = muzzleY - 3.4 * scale;
+    const bottom = muzzleY + 5.6 * scale;
+    const wing = 5.4 * scale;
+    const mid = muzzleY + 1.2 * scale;
     shapes.push({
       kind: 'path',
-      d: `M${(centerX - 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Q${centerX.toFixed(1)},${(muzzleY + 4 * scale).toFixed(1)} ${(centerX + 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Q${centerX.toFixed(1)},${(muzzleY - 1 * scale).toFixed(1)} ${(centerX - 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Z`,
-      fill: palette.nose,
+      d: `M${centerX.toFixed(1)},${top.toFixed(1)} L${(centerX + wing).toFixed(1)},${mid.toFixed(1)} L${centerX.toFixed(1)},${bottom.toFixed(1)} L${(centerX - wing).toFixed(1)},${mid.toFixed(1)} Z`,
+      fill: palette.accessory,
       stroked: true,
+    });
+    shapes.push({
+      kind: 'line',
+      x1: centerX,
+      y1: top + 1 * scale,
+      x2: centerX,
+      y2: bottom - 1 * scale,
+      stroke: palette.accessoryDark,
+      width: 0.7 * scale,
+      opacity: 0.8,
     });
     return;
   }
 
-  if (style === 'long') {
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 3.4 * scale, rx: 10 * scale, ry: 6.6 * scale, fill: palette.light, stroked: true });
-  } else {
-    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.6 * scale, rx: 6.8 * scale, ry: 4.6 * scale, fill: palette.light });
+  if (kind === 'dogSnout') {
+    // 前に張り出した、いぬらしい鼻づら
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 4 * scale, rx: 9 * scale, ry: 6.4 * scale, fill: palette.light, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.2 * scale, rx: 2.6 * scale, ry: 2 * scale, fill: palette.eyeDark, stroked: true });
+    return;
   }
-  shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 0.4 * scale, rx: 2.3 * scale, ry: 1.7 * scale, fill: palette.nose, stroked: true });
+
+  if (kind === 'bearRound') {
+    // まるい、くまらしい鼻先パッチ
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 3 * scale, rx: 7.6 * scale, ry: 6.4 * scale, fill: palette.light, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1 * scale, rx: 2.4 * scale, ry: 1.8 * scale, fill: palette.eyeDark, stroked: true });
+    return;
+  }
+
+  if (kind === 'dragonSnout') {
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 2.6 * scale, rx: 7.6 * scale, ry: 4.6 * scale, fill: palette.light, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 0.6 * scale, rx: 1.6 * scale, ry: 1.2 * scale, fill: palette.deepShade });
+    return;
+  }
+
+  // catSmall / rabbitSmall：小さくかわいい鼻づら
+  shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.4 * scale, rx: 6.4 * scale, ry: 4.4 * scale, fill: palette.light });
+  shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 0.2 * scale, rx: 2.1 * scale, ry: 1.6 * scale, fill: palette.nose, stroked: true });
+
+  if (kind === 'catSmall') {
+    for (const direction of [-1, 1]) {
+      shapes.push({ kind: 'ellipse', cx: centerX + direction * 4.2 * scale, cy: muzzleY + 2.6 * scale, rx: 1.6 * scale, ry: 1.2 * scale, fill: palette.light, opacity: 0.9 });
+    }
+  }
+
+  if (hasBuckTeeth) {
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'path',
+        d: `M${(centerX + direction * 1.3 * scale).toFixed(1)},${(muzzleY + 3 * scale).toFixed(1)} L${(centerX + direction * 2.2 * scale).toFixed(1)},${(muzzleY + 3 * scale).toFixed(1)} L${(centerX + direction * 2.2 * scale).toFixed(1)},${(muzzleY + 6.4 * scale).toFixed(1)} L${(centerX + direction * 1.3 * scale).toFixed(1)},${(muzzleY + 6.4 * scale).toFixed(1)} Z`,
+        fill: '#fffdf6',
+        stroked: true,
+      });
+    }
+  }
 
   if (hasWhiskers) {
     for (const direction of [-1, 1]) {
       for (const offset of [-2.2, 0, 2.2]) {
         shapes.push({
           kind: 'line',
-          x1: centerX + direction * 8 * scale,
+          x1: centerX + direction * 7.4 * scale,
           y1: muzzleY + offset * scale,
-          x2: centerX + direction * 15 * scale,
+          x2: centerX + direction * 14 * scale,
           y2: muzzleY + offset * 1.6 * scale,
           stroke: palette.outline,
           width: 0.8 * scale,
-          opacity: 0.7,
+          opacity: 0.65,
         });
       }
     }
   }
 }
 
-/** えり・リボンなど、首まわりの飾り。頭より先に描き、あごの下から覗く自然な位置にする。 */
 function pushNeckwear(
   shapes: MascotShape[],
   palette: Palette,
@@ -636,7 +818,9 @@ function pushNeckwear(
   neckY: number,
   bodyHalfWidth: number,
   scale: number,
+  outlineWidth: number,
 ): void {
+  void outlineWidth;
   if (style !== 'collar' && style !== 'ribbon') return;
 
   shapes.push({
@@ -662,7 +846,6 @@ function pushNeckwear(
   }
 }
 
-/** かんむり。頭より後に描き、いちばん手前にのせる。 */
 function pushCrown(
   shapes: MascotShape[],
   palette: Palette,
@@ -670,7 +853,9 @@ function pushCrown(
   centerX: number,
   crownBaseY: number,
   scale: number,
+  outlineWidth: number,
 ): void {
+  void outlineWidth;
   if (style !== 'crown' && style !== 'crownGem') return;
 
   const top = Math.max(2, crownBaseY);
@@ -784,19 +969,21 @@ function pushWings(
   bodyHalfWidth: number,
   scale: number,
   lift: number,
+  outlineWidth: number,
 ): void {
+  void outlineWidth;
   for (const direction of [-1, 1]) {
     const originX = centerX + direction * (bodyHalfWidth - 3);
     const originY = bodyCenterY - 8 * scale + lift;
     shapes.push({
       kind: 'path',
-      d: teardropPath(originX, originY, direction, 24 * scale, 11 * scale),
+      d: leafPath(originX, originY, direction, 24 * scale, 10.5 * scale),
       fill: palette.accessoryDark,
       stroked: true,
     });
     shapes.push({
       kind: 'path',
-      d: teardropPath(originX, originY - 2, direction, 15 * scale, 6 * scale),
+      d: leafPath(originX, originY - 2, direction, 15 * scale, 5.6 * scale),
       fill: palette.accessory,
     });
   }
@@ -810,17 +997,19 @@ function pushTail(
   bodyCenterY: number,
   scale: number,
   frame: number,
+  outlineWidth: number,
 ): void {
+  void outlineWidth;
   const wag = frame === 1 ? -1 : 1;
   switch (style) {
     case 'long':
       shapes.push({
         kind: 'path',
-        d: teardropPath(tailX, bodyCenterY, wag, 22 * scale, 5.4 * scale),
+        d: leafPath(tailX, bodyCenterY, wag, 22 * scale, 5 * scale),
         fill: palette.shade,
         stroked: true,
       });
-      shapes.push({ kind: 'ellipse', cx: tailX + wag * 20 * scale, cy: bodyCenterY - 12 * scale, rx: 4.2 * scale, ry: 4.2 * scale, fill: palette.light });
+      shapes.push({ kind: 'ellipse', cx: tailX + wag * 20 * scale, cy: bodyCenterY - 12 * scale, rx: 4 * scale, ry: 4 * scale, fill: palette.light });
       break;
     case 'stubby':
       shapes.push({ kind: 'ellipse', cx: tailX + 3 * scale, cy: bodyCenterY + 3 * wag * scale, rx: 5 * scale, ry: 6 * scale, fill: palette.shade, stroked: true });
@@ -837,7 +1026,7 @@ function pushTail(
         const size = (4.6 - step * 0.6) * scale;
         shapes.push({
           kind: 'path',
-          d: teardropPath(tailX + (4 + step * 3.2) * scale, bodyCenterY + (2 + step * 2.6) * scale, 1, size * 1.8, size),
+          d: leafPath(tailX + (4 + step * 3.2) * scale, bodyCenterY + (2 + step * 2.6) * scale, 1, size * 1.8, size),
           fill: step % 2 === 0 ? palette.base : palette.accessoryDark,
           stroked: true,
         });
