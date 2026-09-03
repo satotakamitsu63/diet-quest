@@ -115,20 +115,19 @@ a,
   gap: 16px;
 }
 
-.mascot-canvas {
-  image-rendering: pixelated;
+.mascot-art {
   background: radial-gradient(circle at 50% 60%, #2b2740 0%, #1a1726 70%);
   border-radius: var(--radius);
   flex-shrink: 0;
   display: block;
 }
 
-.mascot-card .mascot-canvas {
+.mascot-card .mascot-art {
   width: 148px;
   height: 148px;
 }
 
-.family-card .mascot-canvas {
+.family-card .mascot-art {
   width: 84px;
   height: 84px;
 }
@@ -691,7 +690,7 @@ a,
   background: rgba(255, 204, 77, 0.08);
 }
 
-.fighter .mascot-canvas {
+.fighter .mascot-art {
   width: 92px;
   height: 92px;
 }

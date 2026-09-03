@@ -20,7 +20,7 @@ import {
 import {
   buildHeightGoal, calculateHeightVelocity, predictAdultHeight, referenceVelocityRange,
 } from '../src/logic/heightGoal';
-import { buildMascotGrid } from '../src/art/mascot';
+import { buildMascotArtwork, type MascotShape } from '../src/art/mascot';
 import {
   ageMultiplier, awardMultiplier, buildBattleBuild, buildBattleStats,
   calculateAwardScore, physiqueMultiplier, resolveSpecialMoveName, simulateBattle,
@@ -473,32 +473,64 @@ console.log('\n== 週ごとのふりかえり ==');
     `${calculateDailyPenalty(emptyDay)}点`);
 }
 
-console.log('\n== ドット絵の生成 ==');
+console.log('\n== キャラクターの見た目（SVG） ==');
+/** シルエットの大きさのおおよその目安。楕円・円の半径から面積相当の値を積み上げる。 */
+function approximateExtent(shapes: MascotShape[]): number {
+  return shapes.reduce((total, shape) => {
+    if (shape.kind === 'ellipse') return total + shape.rx * shape.ry;
+    if (shape.kind === 'circle') return total + shape.r * shape.r;
+    return total;
+  }, 0);
+}
 {
   // 6種類すべてが描け、互いに違う見た目になっていること
   const species = ['cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon'] as const;
   const signatures = new Map<string, string>();
   for (const kind of species) {
-    const grid = buildMascotGrid({ species: kind, shapeValue: 0.5, growthStage: 5, condition: 'steady' });
-    const filled = grid.flat().filter((cell) => cell !== '').length;
-    check(`${kind} が描ける`, filled > 200, `${filled}ドット`);
-    signatures.set(kind, grid.map((row) => row.map((c) => (c ? '1' : '0')).join('')).join(''));
+    const artwork = buildMascotArtwork({ species: kind, shapeValue: 0.5, growthStage: 5, condition: 'steady' });
+    check(`${kind} が描ける`, artwork.shapes.length > 15, `${artwork.shapes.length}個の図形`);
+    signatures.set(kind, JSON.stringify(artwork.shapes));
   }
   const unique = new Set(signatures.values());
   check('6種類すべて違うシルエットになる', unique.size === species.length, `${unique.size}種類`);
 }
 for (const stage of [0, 5, 9]) {
   for (const shape of [0.05, 0.5, 0.95]) {
-    const grid = buildMascotGrid({ species: 'cat', shapeValue: shape, growthStage: stage, condition: 'steady' });
-    const filled = grid.flat().filter((cell) => cell !== '').length;
-    check(`段階${stage} 体型${shape} が描ける`, filled > 200, `${filled}ドット`);
+    const artwork = buildMascotArtwork({ species: 'cat', shapeValue: shape, growthStage: stage, condition: 'steady' });
+    check(`段階${stage} 体型${shape} が描ける`, artwork.shapes.length > 15, `${artwork.shapes.length}個の図形`);
   }
 }
-const thin = buildMascotGrid({ species: 'dog', shapeValue: 0.05, growthStage: 5, condition: 'steady' })
-  .flat().filter((cell) => cell !== '').length;
-const fat = buildMascotGrid({ species: 'dog', shapeValue: 0.95, growthStage: 5, condition: 'steady' })
-  .flat().filter((cell) => cell !== '').length;
-check('太いほうがドット数が多い', fat > thin, `細${thin} < 太${fat}`);
+const thin = approximateExtent(
+  buildMascotArtwork({ species: 'dog', shapeValue: 0.05, growthStage: 5, condition: 'steady' }).shapes,
+);
+const fat = approximateExtent(
+  buildMascotArtwork({ species: 'dog', shapeValue: 0.95, growthStage: 5, condition: 'steady' }).shapes,
+);
+check('太いほうがシルエットが大きい', fat > thin, `細${thin.toFixed(0)} < 太${fat.toFixed(0)}`);
+
+{
+  // 進化するほど、全体の大きさがはっきり育っていくこと
+  const small = approximateExtent(
+    buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 0, condition: 'steady' }).shapes,
+  );
+  const legend = approximateExtent(
+    buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 9, condition: 'steady' }).shapes,
+  );
+  check('最終段階のほうが初期段階よりはっきり大きい', legend > small * 1.3,
+    `Lv.1=${small.toFixed(0)} → Lv.10=${legend.toFixed(0)}`);
+
+  // 最終段階だけの演出（翼・オーラ）が、他の種族にも咲く
+  const finalCat = buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 9, condition: 'steady' });
+  const midCat = buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 5, condition: 'steady' });
+  check('最終段階は演出が増えて図形数が多い', finalCat.shapes.length > midCat.shapes.length,
+    `Lv.6=${midCat.shapes.length} < Lv.10=${finalCat.shapes.length}`);
+
+  // やつれているときは、どの段階でも表情が変わること
+  const steadyDog = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: 8, condition: 'steady' });
+  const exhaustedDog = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: 8, condition: 'exhausted' });
+  check('やつれていると見た目が変わる（オーラが消えるなど）',
+    JSON.stringify(steadyDog.shapes) !== JSON.stringify(exhaustedDog.shapes));
+}
 
 console.log(failures === 0 ? '\nすべて通りました。\n' : `\n${failures}件が失敗しました。\n`);
 process.exit(failures === 0 ? 0 : 1);

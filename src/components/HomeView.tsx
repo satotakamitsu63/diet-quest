@@ -5,7 +5,7 @@ import type { ProfileView } from '../logic/profileView';
 import { CONDITION_LABELS, MAX_GROWTH_STAGE } from '../logic/score';
 import { buildSuggestions } from '../logic/suggestions';
 import { formatReviewRange } from '../logic/weeklyReview';
-import { MascotCanvas } from './MascotCanvas';
+import { MascotArt } from './MascotArt';
 import { NutrientBars } from './NutrientBars';
 
 type Props = { profile: Profile; view: ProfileView };
@@ -18,12 +18,11 @@ export function HomeView({ profile, view }: Props) {
   return (
     <>
       <section className="card mascot-card">
-        <MascotCanvas
+        <MascotArt
           species={profile.species}
           shapeValue={character.shapeValue}
           growthStage={character.growthStage}
           condition={character.condition}
-          pixelSize={9}
         />
         <div className="mascot-info">
           <h2 className="mascot-name">{profile.characterName}</h2>

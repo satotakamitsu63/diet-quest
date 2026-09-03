@@ -14,7 +14,7 @@ import {
   type Combatant,
 } from '../logic/battle';
 import { buildProfileView } from '../logic/profileView';
-import { MascotCanvas } from './MascotCanvas';
+import { MascotArt } from './MascotArt';
 
 /** ステータスの棒の長さを決めるための上限。だいたいの最大値。 */
 const STAT_SCALE = 320;
@@ -53,12 +53,11 @@ type FighterCardProps = { combatant: Combatant; isWinner: boolean | null };
 function FighterCard({ combatant, isWinner }: FighterCardProps) {
   return (
     <div className={isWinner ? 'fighter is-winner' : 'fighter'}>
-      <MascotCanvas
+      <MascotArt
         species={combatant.species}
         shapeValue={combatant.shapeValue}
         growthStage={combatant.growthStage}
         condition={combatant.condition}
-        pixelSize={5}
         animate={false}
       />
       <strong className="fighter-name">{combatant.characterName}</strong>

@@ -2,86 +2,36 @@ import type { CharacterSpecies } from '../lib/types';
 import type { CharacterCondition } from '../logic/score';
 import { buildPalette, type Palette } from './palette';
 
-export const SPRITE_SIZE = 32;
+/** SVG の座標系。100×100 のなかで完結させる。 */
+export const VIEW_SIZE = 100;
 
-/** 空文字は透明。それ以外は色コード。 */
-export type SpriteGrid = string[][];
-
-function createGrid(): SpriteGrid {
-  return Array.from({ length: SPRITE_SIZE }, () => Array.from({ length: SPRITE_SIZE }, () => ''));
-}
-
-function setPixel(grid: SpriteGrid, x: number, y: number, color: string): void {
-  const gridX = Math.round(x);
-  const gridY = Math.round(y);
-  if (gridX < 0 || gridY < 0 || gridX >= SPRITE_SIZE || gridY >= SPRITE_SIZE) return;
-  grid[gridY][gridX] = color;
-}
-
-function fillEllipse(
-  grid: SpriteGrid,
-  centerX: number,
-  centerY: number,
-  radiusX: number,
-  radiusY: number,
-  color: string,
-): void {
-  for (let y = Math.floor(centerY - radiusY); y <= Math.ceil(centerY + radiusY); y += 1) {
-    for (let x = Math.floor(centerX - radiusX); x <= Math.ceil(centerX + radiusX); x += 1) {
-      const normalizedX = (x - centerX) / radiusX;
-      const normalizedY = (y - centerY) / radiusY;
-      if (normalizedX * normalizedX + normalizedY * normalizedY <= 1) setPixel(grid, x, y, color);
+export type MascotShape =
+  | {
+      kind: 'ellipse';
+      cx: number;
+      cy: number;
+      rx: number;
+      ry: number;
+      fill: string;
+      opacity?: number;
+      stroked?: boolean;
+      rotate?: number;
     }
-  }
-}
+  | { kind: 'path'; d: string; fill: string; opacity?: number; stroked?: boolean }
+  | { kind: 'circle'; cx: number; cy: number; r: number; fill: string; opacity?: number; stroked?: boolean }
+  | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; opacity?: number }
+  | { kind: 'ring'; cx: number; cy: number; r: number; stroke: string; width: number; opacity?: number }
+  | { kind: 'gradient-def'; id: string; from: string; to: string; x1: number; y1: number; x2: number; y2: number };
 
-function fillRect(
-  grid: SpriteGrid,
-  left: number,
-  top: number,
-  right: number,
-  bottom: number,
-  color: string,
-): void {
-  for (let y = Math.round(top); y <= Math.round(bottom); y += 1) {
-    for (let x = Math.round(left); x <= Math.round(right); x += 1) {
-      setPixel(grid, x, y, color);
-    }
-  }
-}
-
-function fillTriangle(
-  grid: SpriteGrid,
-  apexX: number,
-  apexY: number,
-  halfWidth: number,
-  height: number,
-  color: string,
-): void {
-  for (let step = 0; step <= height; step += 1) {
-    const spread = Math.round((halfWidth * step) / height);
-    for (let x = apexX - spread; x <= apexX + spread; x += 1) {
-      setPixel(grid, x, apexY + step, color);
-    }
-  }
-}
-
-/** 輪郭線を後から足す。塗られた画素に隣接する透明画素を輪郭色にする。 */
-function addOutline(grid: SpriteGrid, color: string): void {
-  const filled: Array<[number, number]> = [];
-  for (let y = 0; y < SPRITE_SIZE; y += 1) {
-    for (let x = 0; x < SPRITE_SIZE; x += 1) {
-      if (grid[y][x] !== '') continue;
-      const hasFilledNeighbour =
-        (y > 0 && grid[y - 1][x] !== '') ||
-        (y < SPRITE_SIZE - 1 && grid[y + 1][x] !== '') ||
-        (x > 0 && grid[y][x - 1] !== '') ||
-        (x < SPRITE_SIZE - 1 && grid[y][x + 1] !== '');
-      if (hasFilledNeighbour) filled.push([x, y]);
-    }
-  }
-  for (const [x, y] of filled) grid[y][x] = color;
-}
+export type MascotArtwork = {
+  viewBox: string;
+  outlineColor: string;
+  outlineWidth: number;
+  /** 背景から前面へ、描く順に並んでいる */
+  shapes: MascotShape[];
+  /** body/head の塗りに使うグラデーションの id */
+  bodyGradientId: string;
+};
 
 function lerp(from: number, to: number, ratio: number): number {
   return from + (to - from) * Math.min(1, Math.max(0, ratio));
@@ -96,7 +46,6 @@ type SpeciesTraits = {
   muzzle: MuzzleStyle;
   tail: TailStyle;
   hasWhiskers: boolean;
-  /** ぺんぎんの白いお腹のように、胴の前面を明るく塗る */
   hasBellyPatch: boolean;
   hasWings: boolean;
 };
@@ -110,6 +59,82 @@ const SPECIES_TRAITS: Record<CharacterSpecies, SpeciesTraits> = {
   dragon: { ears: 'horns', muzzle: 'long', tail: 'spiky', hasWhiskers: false, hasBellyPatch: false, hasWings: true },
 };
 
+type EyeStyle = 'droopy' | 'round' | 'sparkle' | 'hero';
+type MouthStyle = 'sad' | 'smile' | 'grin';
+type AccessoryStyle = 'none' | 'collar' | 'ribbon' | 'crown' | 'crownGem';
+type AuraStyle = 'none' | 'sparkle' | 'burstSmall' | 'burstBig';
+
+type StageLook = {
+  scale: number;
+  coatMix: number;
+  eyes: EyeStyle;
+  mouth: MouthStyle;
+  blush: boolean;
+  accessory: AccessoryStyle;
+  aura: AuraStyle;
+  bonusWings: boolean;
+};
+
+/**
+ * 10段階の見た目テーブル。よれよれ→かわいい→かっこいいの流れが
+ * ひと目で伝わるよう、色だけでなく形・表情・演出を段階ごとに変える。
+ */
+const STAGE_LOOKS: StageLook[] = [
+  { scale: 0.82, coatMix: 0.0, eyes: 'droopy', mouth: 'sad', blush: false, accessory: 'none', aura: 'none', bonusWings: false },
+  { scale: 0.88, coatMix: 0.08, eyes: 'droopy', mouth: 'sad', blush: false, accessory: 'none', aura: 'none', bonusWings: false },
+  { scale: 0.94, coatMix: 0.24, eyes: 'round', mouth: 'smile', blush: true, accessory: 'collar', aura: 'none', bonusWings: false },
+  { scale: 0.99, coatMix: 0.4, eyes: 'round', mouth: 'smile', blush: true, accessory: 'collar', aura: 'none', bonusWings: false },
+  { scale: 1.04, coatMix: 0.54, eyes: 'round', mouth: 'smile', blush: true, accessory: 'ribbon', aura: 'none', bonusWings: false },
+  { scale: 1.08, coatMix: 0.67, eyes: 'sparkle', mouth: 'smile', blush: true, accessory: 'ribbon', aura: 'none', bonusWings: false },
+  { scale: 1.13, coatMix: 0.78, eyes: 'sparkle', mouth: 'smile', blush: true, accessory: 'ribbon', aura: 'sparkle', bonusWings: false },
+  { scale: 1.18, coatMix: 0.88, eyes: 'sparkle', mouth: 'grin', blush: true, accessory: 'crown', aura: 'sparkle', bonusWings: false },
+  { scale: 1.24, coatMix: 0.96, eyes: 'hero', mouth: 'grin', blush: true, accessory: 'crownGem', aura: 'burstSmall', bonusWings: false },
+  { scale: 1.32, coatMix: 1.0, eyes: 'hero', mouth: 'grin', blush: true, accessory: 'crownGem', aura: 'burstBig', bonusWings: true },
+];
+
+export const GROWTH_STAGE_NAMES = [
+  'よれよれ',
+  'ぼさぼさ',
+  'すこし整った',
+  '毛づやが出た',
+  '目に光が戻った',
+  'きれいになってきた',
+  '見違えた',
+  '自慢の姿',
+  'オーラをまとった',
+  'でんせつのすがた',
+];
+
+const CENTER_X = 50;
+const HEAD_CENTER_Y = 41;
+const BODY_CENTER_Y = 74;
+
+function starPath(cx: number, cy: number, size: number): string {
+  const outer = size;
+  const inner = size * 0.4;
+  const points: string[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const radius = i % 2 === 0 ? outer : inner;
+    const angle = (Math.PI / 4) * i - Math.PI / 2;
+    const x = cx + Math.cos(angle) * radius;
+    const y = cy + Math.sin(angle) * radius;
+    points.push(`${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  return `${points.join(' ')} Z`;
+}
+
+function teardropPath(originX: number, originY: number, dirX: number, length: number, width: number): string {
+  const tipX = originX + dirX * length;
+  const tipY = originY - length * 0.35;
+  const c1x = originX + dirX * length * 0.35;
+  const c1y = originY - width;
+  const c2x = originX + dirX * length * 0.8;
+  const c2y = originY - width * 0.5;
+  const c3x = originX + dirX * length * 0.55;
+  const c3y = originY + width * 0.55;
+  return `M${originX.toFixed(1)},${originY.toFixed(1)} Q${c1x.toFixed(1)},${c1y.toFixed(1)} ${tipX.toFixed(1)},${tipY.toFixed(1)} Q${c2x.toFixed(1)},${c2y.toFixed(1)} ${c3x.toFixed(1)},${c3y.toFixed(1)} L${originX.toFixed(1)},${originY.toFixed(1)} Z`;
+}
+
 export type MascotInput = {
   species: CharacterSpecies;
   /** 0（細い）〜1（太い） */
@@ -121,8 +146,230 @@ export type MascotInput = {
   frame?: number;
 };
 
-function drawEars(
-  grid: SpriteGrid,
+/** 体型・成長段階・調子から、SVGで描くための形の一覧をつくる。 */
+export function buildMascotArtwork(input: MascotInput): MascotArtwork {
+  const { species, condition } = input;
+  const shapeValue = Math.min(1, Math.max(0, input.shapeValue));
+  const growthStage = Math.min(9, Math.max(0, Math.round(input.growthStage)));
+  const frame = input.frame === 1 ? 1 : 0;
+
+  const stageLook = STAGE_LOOKS[growthStage];
+  const traits = SPECIES_TRAITS[species];
+  const isExhausted = condition === 'exhausted';
+
+  const palette = buildPalette({ species, coatMix: stageLook.coatMix, condition });
+  const shapes: MascotShape[] = [];
+
+  const droop = isExhausted ? 1 : condition === 'tired' ? 0.5 : 0;
+  const bounce = frame === 1 && !isExhausted ? -0.8 : 0;
+  const scale = stageLook.scale;
+
+  const bodyHalfWidth = lerp(13, 31, shapeValue) * 0.86 * scale;
+  const bodyRadiusY = lerp(16, 21.5, shapeValue) * scale;
+  const bodyCenterY = BODY_CENTER_Y + bounce;
+
+  const headRadiusX = lerp(24, 29, shapeValue * 0.35) * scale;
+  const headRadiusY = lerp(23, 27, shapeValue * 0.3) * scale;
+  const slouch = growthStage <= 1 ? 2.2 : growthStage <= 3 ? 1 : 0;
+  const headCenterY = HEAD_CENTER_Y + bounce + droop * 1.5 + slouch;
+
+  const effectiveEyes: EyeStyle | 'x' = isExhausted ? 'x' : stageLook.eyes;
+  const effectiveMouth: MouthStyle = isExhausted ? 'sad' : stageLook.mouth;
+  const effectiveAura: AuraStyle = isExhausted ? 'none' : stageLook.aura;
+  const effectiveBlush = stageLook.blush && !isExhausted;
+  const hasWings = traits.hasWings || (stageLook.bonusWings && !isExhausted);
+
+  const bodyGradientId = `mg-${palette.base.slice(1)}-${palette.light.slice(1)}`;
+  shapes.push({
+    kind: 'gradient-def',
+    id: bodyGradientId,
+    from: palette.light,
+    to: palette.base,
+    x1: 30,
+    y1: 10,
+    x2: 70,
+    y2: 95,
+  });
+
+  // ---- 後光（体より奥） ----
+  if (effectiveAura !== 'none') {
+    pushAura(shapes, palette, effectiveAura, CENTER_X, bodyCenterY - 4, frame);
+  }
+
+  // ---- 翼（胴より奥） ----
+  if (hasWings) {
+    pushWings(shapes, palette, CENTER_X, bodyCenterY, bodyHalfWidth, scale, bounce);
+  }
+
+  // ---- 尻尾 ----
+  pushTail(shapes, palette, traits.tail, CENTER_X + bodyHalfWidth, bodyCenterY, scale, frame);
+
+  // ---- 足 ----
+  const footRadius = lerp(4.2, 7, shapeValue) * scale;
+  const footY = bodyCenterY + bodyRadiusY - footRadius * 0.5;
+  shapes.push(
+    { kind: 'ellipse', cx: CENTER_X - bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: palette.shade, stroked: true },
+    { kind: 'ellipse', cx: CENTER_X + bodyHalfWidth * 0.55, cy: footY, rx: footRadius, ry: footRadius * 0.72, fill: palette.shade, stroked: true },
+  );
+
+  // ---- 胴 ----
+  shapes.push({
+    kind: 'ellipse',
+    cx: CENTER_X,
+    cy: bodyCenterY,
+    rx: bodyHalfWidth,
+    ry: bodyRadiusY,
+    fill: `url(#${bodyGradientId})`,
+    stroked: true,
+  });
+
+  if (traits.hasBellyPatch) {
+    shapes.push({
+      kind: 'ellipse',
+      cx: CENTER_X,
+      cy: bodyCenterY + bodyRadiusY * 0.1,
+      rx: bodyHalfWidth * 0.72,
+      ry: bodyRadiusY * 0.85,
+      fill: palette.light,
+    });
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: CENTER_X + direction * (bodyHalfWidth - 1),
+        cy: bodyCenterY,
+        rx: 4.4 * scale,
+        ry: 11 * scale,
+        fill: palette.shade,
+        stroked: true,
+        rotate: direction * 18,
+      });
+    }
+  }
+
+  if (shapeValue < 0.1 && stageLook.coatMix > 0.2) {
+    for (const offset of [-5, 0, 5]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: CENTER_X,
+        cy: bodyCenterY + offset * scale,
+        rx: bodyHalfWidth * 0.55,
+        ry: 1.1 * scale,
+        fill: palette.shade,
+        opacity: 0.6,
+      });
+    }
+  }
+
+  // ---- 耳（頭より奥） ----
+  pushEars(shapes, palette, traits.ears, CENTER_X, headRadiusX, headCenterY, headRadiusY, droop, scale);
+
+  // ---- 頭 ----
+  shapes.push({
+    kind: 'ellipse',
+    cx: CENTER_X,
+    cy: headCenterY,
+    rx: headRadiusX,
+    ry: headRadiusY,
+    fill: `url(#${bodyGradientId})`,
+    stroked: true,
+  });
+
+  if (shapeValue > 0.7) {
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: CENTER_X + direction * headRadiusX * 0.86,
+        cy: headCenterY + headRadiusY * 0.28,
+        rx: headRadiusX * 0.3,
+        ry: headRadiusY * 0.26,
+        fill: palette.base,
+      });
+    }
+  }
+
+  // つやハイライト。トイのような光沢
+  shapes.push({
+    kind: 'ellipse',
+    cx: CENTER_X - headRadiusX * 0.42,
+    cy: headCenterY - headRadiusY * 0.52,
+    rx: headRadiusX * 0.34,
+    ry: headRadiusY * 0.22,
+    fill: '#ffffff',
+    opacity: 0.55,
+    rotate: -20,
+  });
+
+  const eyeSpread = headRadiusX * 0.44;
+  const eyeY = headCenterY - headRadiusY * 0.02;
+  if (effectiveEyes === 'x') {
+    pushExhaustedEyes(shapes, palette, CENTER_X - eyeSpread, CENTER_X + eyeSpread, eyeY, scale);
+  } else {
+    pushEyes(shapes, palette, effectiveEyes, CENTER_X - eyeSpread, CENTER_X + eyeSpread, eyeY, scale);
+  }
+
+  const muzzleY = headCenterY + headRadiusY * 0.46;
+  pushMuzzle(shapes, palette, traits.muzzle, traits.hasWhiskers, CENTER_X, muzzleY, scale);
+  pushMouth(shapes, palette, effectiveMouth, species, CENTER_X, muzzleY + headRadiusY * 0.24, scale);
+
+  // ---- 首まわりの飾り。あごのすぐ下、頭の前面に乗せる ----
+  pushNeckwear(shapes, palette, stageLook.accessory, CENTER_X, headCenterY + headRadiusY * 1.04, bodyHalfWidth, scale);
+
+  if (effectiveBlush) {
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: CENTER_X + direction * headRadiusX * 0.66,
+        cy: headCenterY + headRadiusY * 0.34,
+        rx: headRadiusX * 0.16,
+        ry: headRadiusY * 0.11,
+        fill: palette.blush,
+        opacity: 0.85,
+      });
+    }
+  }
+
+  if (growthStage <= 1) {
+    const patches: Array<[number, number, number]> = [
+      [CENTER_X - bodyHalfWidth * 0.4, bodyCenterY - 4, 4],
+      [CENTER_X + bodyHalfWidth * 0.45, bodyCenterY + 4, 3.2],
+    ];
+    for (const [x, y, radius] of patches) {
+      shapes.push({ kind: 'ellipse', cx: x, cy: y, rx: radius, ry: radius * 0.7, fill: palette.deepShade, opacity: 0.8 });
+    }
+    const tufts: Array<[number, number, number]> = [
+      [CENTER_X - headRadiusX - 1, headCenterY - headRadiusY + 3, -30],
+      [CENTER_X + headRadiusX + 1, headCenterY - headRadiusY + 6, 25],
+      [CENTER_X + 6, headCenterY - headRadiusY - 2, -12],
+    ];
+    for (const [x, y, angle] of tufts) {
+      shapes.push({ kind: 'path', d: teardropPath(x, y, angle > 0 ? 1 : -1, 6, 1.6), fill: palette.deepShade });
+    }
+  }
+
+  const earsRiseUp = traits.ears === 'pointed' || traits.ears === 'tall';
+  const crownBaseY = headCenterY - headRadiusY - (earsRiseUp ? 12 : 5) * scale + droop * 2;
+  pushCrown(shapes, palette, stageLook.accessory, CENTER_X, crownBaseY, scale);
+
+  if (isExhausted) {
+    shapes.push({
+      kind: 'path',
+      d: `M${(CENTER_X + headRadiusX + 2).toFixed(1)},${(headCenterY - headRadiusY * 0.3).toFixed(1)} q3,4 0,8 q-3,-2 0,-8 Z`,
+      fill: '#8ec9e8',
+      opacity: 0.9,
+    });
+  }
+
+  return {
+    viewBox: `0 0 ${VIEW_SIZE} ${VIEW_SIZE}`,
+    outlineColor: palette.outline,
+    outlineWidth: 2.1,
+    shapes,
+    bodyGradientId,
+  };
+}
+
+function pushEars(
+  shapes: MascotShape[],
   palette: Palette,
   style: EarStyle,
   headCenterX: number,
@@ -130,379 +377,474 @@ function drawEars(
   headCenterY: number,
   headRadiusY: number,
   droop: number,
+  scale: number,
 ): void {
   const headTop = headCenterY - headRadiusY;
-  const leftX = headCenterX - headRadiusX + 2;
-  const rightX = headCenterX + headRadiusX - 2;
+  const leftX = headCenterX - headRadiusX * 0.6;
+  const rightX = headCenterX + headRadiusX * 0.6;
 
   if (style === 'pointed') {
-    // 元気がないほど耳が寝る
-    const apexY = Math.round(headTop - 4 + droop * 3);
-    fillTriangle(grid, leftX, apexY, 3, 6, palette.base);
-    fillTriangle(grid, rightX, apexY, 3, 6, palette.base);
-    fillTriangle(grid, leftX, apexY + 2, 2, 4, palette.nose);
-    fillTriangle(grid, rightX, apexY + 2, 2, 4, palette.nose);
+    const apexY = headTop + 4 * scale + droop * 4;
+    for (const [x, dir] of [[leftX, -1] as const, [rightX, 1] as const]) {
+      shapes.push({ kind: 'path', d: teardropPath(x, apexY, dir, 15 * scale, 6.5 * scale), fill: palette.base, stroked: true });
+      shapes.push({ kind: 'path', d: teardropPath(x, apexY - 1, dir, 9 * scale, 3.4 * scale), fill: palette.nose });
+    }
     return;
   }
 
   if (style === 'floppy') {
-    // 顔の横に、幅広で長い耳を垂らす
-    const earTop = headTop + 1 + Math.round(droop * 2);
-    fillEllipse(grid, headCenterX - headRadiusX - 1, earTop + 6, 3.2, 7, palette.shade);
-    fillEllipse(grid, headCenterX + headRadiusX + 1, earTop + 6, 3.2, 7, palette.shade);
+    const earTop = headTop + 8 * scale + droop * 3;
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'ellipse',
+        cx: headCenterX + direction * (headRadiusX + 2),
+        cy: earTop + 12 * scale,
+        rx: 8 * scale,
+        ry: 15 * scale,
+        fill: palette.shade,
+        stroked: true,
+        rotate: direction * 12,
+      });
+      shapes.push({
+        kind: 'ellipse',
+        cx: headCenterX + direction * (headRadiusX + 2),
+        cy: earTop + 12 * scale,
+        rx: 4 * scale,
+        ry: 10 * scale,
+        fill: palette.deepShade,
+        rotate: direction * 12,
+      });
+    }
     return;
   }
 
   if (style === 'tall') {
-    // うさぎ。長い耳が、元気がないと外へ傾く
-    const lean = Math.round(droop * 2);
-    fillEllipse(grid, headCenterX - 3 - lean, headTop - 4, 1.8, 6, palette.base);
-    fillEllipse(grid, headCenterX + 3 + lean, headTop - 4, 1.8, 6, palette.base);
-    fillEllipse(grid, headCenterX - 3 - lean, headTop - 4, 0.9, 4.2, palette.nose);
-    fillEllipse(grid, headCenterX + 3 + lean, headTop - 4, 0.9, 4.2, palette.nose);
+    const lean = droop * 5;
+    const earHeight = 24 * scale;
+    for (const direction of [-1, 1]) {
+      const baseX = headCenterX + direction * 8 * scale;
+      shapes.push({
+        kind: 'ellipse',
+        cx: baseX + direction * lean * 0.4,
+        cy: headTop - earHeight * 0.42,
+        rx: 4.4 * scale,
+        ry: earHeight * 0.55,
+        fill: palette.base,
+        stroked: true,
+        rotate: direction * (6 + lean),
+      });
+      shapes.push({
+        kind: 'ellipse',
+        cx: baseX + direction * lean * 0.4,
+        cy: headTop - earHeight * 0.4,
+        rx: 2 * scale,
+        ry: earHeight * 0.4,
+        fill: palette.nose,
+        rotate: direction * (6 + lean),
+      });
+    }
     return;
   }
 
   if (style === 'round') {
-    // くま。頭の上に小さな丸い耳
-    fillEllipse(grid, headCenterX - headRadiusX + 1, headTop + 1, 2.4, 2.4, palette.base);
-    fillEllipse(grid, headCenterX + headRadiusX - 1, headTop + 1, 2.4, 2.4, palette.base);
-    fillEllipse(grid, headCenterX - headRadiusX + 1, headTop + 1, 1.2, 1.2, palette.nose);
-    fillEllipse(grid, headCenterX + headRadiusX - 1, headTop + 1, 1.2, 1.2, palette.nose);
+    for (const [x, dir] of [[leftX, -1] as const, [rightX, 1] as const]) {
+      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 8 * scale, fill: palette.base, stroked: true });
+      shapes.push({ kind: 'circle', cx: x + dir * 2, cy: headTop + 5 * scale, r: 3.6 * scale, fill: palette.nose });
+    }
     return;
   }
 
   if (style === 'horns') {
-    // ドラゴン。頭にくっついたまま、後ろ上へ伸びる短い角
     for (const direction of [-1, 1]) {
-      for (let step = 0; step < 4; step += 1) {
-        const x = headCenterX + direction * (3 + step);
-        const y = headTop + 1 - step;
-        setPixel(grid, x, y, palette.accessoryDark);
-        setPixel(grid, x, y + 1, palette.accessoryDark);
-      }
+      shapes.push({
+        kind: 'path',
+        d: teardropPath(headCenterX + direction * 9 * scale, headTop + 4 * scale, direction, 13 * scale, 3.6 * scale),
+        fill: palette.accessoryDark,
+        stroked: true,
+      });
     }
   }
 }
 
-function drawEyes(
-  grid: SpriteGrid,
+function pushEyes(
+  shapes: MascotShape[],
   palette: Palette,
-  growthStage: number,
-  condition: CharacterCondition,
+  style: EyeStyle,
   leftEyeX: number,
   rightEyeX: number,
   eyeY: number,
+  scale: number,
 ): void {
-  const eyeRadius = growthStage <= 1 ? 1 : growthStage <= 4 ? 1.6 : 2.2;
-
-  if (condition === 'exhausted') {
-    // 半目にして、下に隈を入れる
+  if (style === 'droopy') {
     for (const eyeX of [leftEyeX, rightEyeX]) {
-      fillRect(grid, eyeX - 2, eyeY, eyeX + 1, eyeY, palette.outline);
-      fillRect(grid, eyeX - 2, eyeY + 2, eyeX + 1, eyeY + 2, palette.shade);
+      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + 1.5, rx: 5.6 * scale, ry: 2.6 * scale, fill: palette.eyeDark, opacity: 0.85 });
+      shapes.push({
+        kind: 'path',
+        d: `M${(eyeX - 5.6 * scale).toFixed(1)},${eyeY.toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 3 * scale).toFixed(1)} ${(eyeX + 5.6 * scale).toFixed(1)},${eyeY.toFixed(1)} L${(eyeX + 5.6 * scale).toFixed(1)},${(eyeY + 1.2).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 1.2 * scale).toFixed(1)} ${(eyeX - 5.6 * scale).toFixed(1)},${(eyeY + 1.2).toFixed(1)} Z`,
+        fill: palette.outline,
+      });
+      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + 8.2 * scale, rx: 5.2 * scale, ry: 2.4 * scale, fill: palette.deepShade, opacity: 0.55 });
     }
     return;
   }
 
-  for (const eyeX of [leftEyeX, rightEyeX]) {
-    fillEllipse(grid, eyeX, eyeY, eyeRadius, eyeRadius + 0.4, palette.eye);
-    if (growthStage >= 4) {
-      setPixel(grid, eyeX - 1, eyeY - 1, palette.eyeHighlight);
-      if (growthStage >= 7) setPixel(grid, eyeX + 1, eyeY + 1, palette.eyeHighlight);
+  if (style === 'hero') {
+    for (const eyeX of [leftEyeX, rightEyeX]) {
+      const direction = eyeX < CENTER_X ? -1 : 1;
+      shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx: 6.8 * scale, ry: 4.8 * scale, fill: palette.eyeDark, stroked: true, rotate: -direction * 8 });
+      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 1, cy: eyeY, rx: 5.4 * scale, ry: 3.7 * scale, fill: palette.eye, rotate: -direction * 8 });
+      shapes.push({ kind: 'ellipse', cx: eyeX + direction * 2.4, cy: eyeY - 1, rx: 1.6 * scale, ry: 2.3 * scale, fill: palette.eyeHighlight });
+      shapes.push({
+        kind: 'path',
+        d: `M${(eyeX - 6.4 * scale).toFixed(1)},${(eyeY - 7.5 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 10.5 * scale).toFixed(1)} ${(eyeX + 6.4 * scale).toFixed(1)},${(eyeY - 6.5 * scale).toFixed(1)} L${(eyeX + 6 * scale).toFixed(1)},${(eyeY - 4.6 * scale).toFixed(1)} Q${eyeX.toFixed(1)},${(eyeY - 8.2 * scale).toFixed(1)} ${(eyeX - 6 * scale).toFixed(1)},${(eyeY - 5.6 * scale).toFixed(1)} Z`,
+        fill: palette.deepShade,
+      });
     }
-    if (growthStage <= 1) {
-      // 目の下の隈。みすぼらしい初期状態の要
-      fillRect(grid, eyeX - 2, eyeY + 2, eyeX + 1, eyeY + 2, palette.shade);
+    return;
+  }
+
+  const radius = style === 'sparkle' ? 8.4 * scale : 7.1 * scale;
+  for (const eyeX of [leftEyeX, rightEyeX]) {
+    shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY, rx: radius, ry: radius * 1.14, fill: palette.eyeDark, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: eyeX, cy: eyeY + radius * 0.14, rx: radius * 0.76, ry: radius * 0.86, fill: palette.eye });
+    shapes.push({ kind: 'ellipse', cx: eyeX - radius * 0.3, cy: eyeY - radius * 0.36, rx: radius * 0.4, ry: radius * 0.46, fill: palette.eyeHighlight });
+    if (style === 'sparkle') {
+      shapes.push({ kind: 'ellipse', cx: eyeX + radius * 0.4, cy: eyeY + radius * 0.3, rx: radius * 0.16, ry: radius * 0.18, fill: palette.eyeHighlight });
+      shapes.push({ kind: 'ellipse', cx: eyeX - radius * 0.05, cy: eyeY + radius * 0.55, rx: radius * 0.12, ry: radius * 0.12, fill: palette.eyeHighlight, opacity: 0.8 });
     }
   }
 }
 
-function drawMuzzle(
-  grid: SpriteGrid,
+function pushExhaustedEyes(
+  shapes: MascotShape[],
+  palette: Palette,
+  leftEyeX: number,
+  rightEyeX: number,
+  eyeY: number,
+  scale: number,
+): void {
+  const half = 5.4 * scale;
+  for (const eyeX of [leftEyeX, rightEyeX]) {
+    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY - half, x2: eyeX + half, y2: eyeY + half, stroke: palette.outline, width: 2.4 * scale });
+    shapes.push({ kind: 'line', x1: eyeX - half, y1: eyeY + half, x2: eyeX + half, y2: eyeY - half, stroke: palette.outline, width: 2.4 * scale });
+  }
+}
+
+function pushMouth(
+  shapes: MascotShape[],
+  palette: Palette,
+  style: MouthStyle,
+  species: CharacterSpecies,
+  centerX: number,
+  mouthY: number,
+  scale: number,
+): void {
+  if (species === 'penguin' && style !== 'grin') return;
+
+  if (style === 'sad') {
+    shapes.push({ kind: 'line', x1: centerX - 6.2 * scale, y1: mouthY + 2.2 * scale, x2: centerX, y2: mouthY - 2.4 * scale, stroke: palette.outline, width: 2.3 * scale });
+    shapes.push({ kind: 'line', x1: centerX + 6.2 * scale, y1: mouthY + 2.2 * scale, x2: centerX, y2: mouthY - 2.4 * scale, stroke: palette.outline, width: 2.3 * scale });
+    return;
+  }
+
+  if (style === 'grin') {
+    shapes.push({
+      kind: 'path',
+      d: `M${(centerX - 7 * scale).toFixed(1)},${mouthY.toFixed(1)} Q${centerX.toFixed(1)},${(mouthY + 9 * scale).toFixed(1)} ${(centerX + 7 * scale).toFixed(1)},${mouthY.toFixed(1)} Q${centerX.toFixed(1)},${(mouthY + 3.4 * scale).toFixed(1)} ${(centerX - 7 * scale).toFixed(1)},${mouthY.toFixed(1)} Z`,
+      fill: palette.deepShade,
+      stroked: true,
+    });
+    shapes.push({
+      kind: 'path',
+      d: `M${(centerX - 2.6 * scale).toFixed(1)},${(mouthY + 0.4 * scale).toFixed(1)} L${(centerX + 2.6 * scale).toFixed(1)},${(mouthY + 0.4 * scale).toFixed(1)} L${(centerX + 1.6 * scale).toFixed(1)},${(mouthY + 3.4 * scale).toFixed(1)} L${(centerX - 1.6 * scale).toFixed(1)},${(mouthY + 3.4 * scale).toFixed(1)} Z`,
+      fill: '#ffffff',
+    });
+    return;
+  }
+
+  // かわいい "w" のかたちの口。全種族に共通のチャームポイント
+  shapes.push({
+    kind: 'line',
+    x1: centerX - 6 * scale,
+    y1: mouthY - 2.2 * scale,
+    x2: centerX,
+    y2: mouthY + 0.4 * scale,
+    stroke: palette.outline,
+    width: 2.2 * scale,
+  });
+  shapes.push({
+    kind: 'line',
+    x1: centerX,
+    y1: mouthY + 0.4 * scale,
+    x2: centerX + 6 * scale,
+    y2: mouthY - 2.2 * scale,
+    stroke: palette.outline,
+    width: 2.2 * scale,
+  });
+}
+
+function pushMuzzle(
+  shapes: MascotShape[],
   palette: Palette,
   style: MuzzleStyle,
   hasWhiskers: boolean,
   centerX: number,
   muzzleY: number,
-  growthStage: number,
+  scale: number,
 ): void {
   if (style === 'beak') {
-    // ぺんぎんのくちばし
-    fillTriangle(grid, centerX, muzzleY - 1, 3, 4, palette.nose);
+    shapes.push({
+      kind: 'path',
+      d: `M${(centerX - 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Q${centerX.toFixed(1)},${(muzzleY + 4 * scale).toFixed(1)} ${(centerX + 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Q${centerX.toFixed(1)},${(muzzleY - 1 * scale).toFixed(1)} ${(centerX - 6 * scale).toFixed(1)},${(muzzleY - 2 * scale).toFixed(1)} Z`,
+      fill: palette.nose,
+      stroked: true,
+    });
     return;
   }
-  // 口吻が前に出る種は、大きく下に張り出させる
+
   if (style === 'long') {
-    fillEllipse(grid, centerX, muzzleY + 2, 4.4, 3.2, palette.light);
-  }
-  fillEllipse(grid, centerX, muzzleY + 1, 3.4, 2.4, palette.light);
-  setPixel(grid, centerX, muzzleY, palette.nose);
-  setPixel(grid, centerX - 1, muzzleY, palette.nose);
-  setPixel(grid, centerX + 1, muzzleY, palette.nose);
-
-  if (growthStage >= 5) {
-    // 口角が上がる
-    setPixel(grid, centerX - 2, muzzleY + 2, palette.outline);
-    setPixel(grid, centerX + 2, muzzleY + 2, palette.outline);
-    setPixel(grid, centerX - 1, muzzleY + 3, palette.outline);
-    setPixel(grid, centerX + 1, muzzleY + 3, palette.outline);
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 3.4 * scale, rx: 10 * scale, ry: 6.6 * scale, fill: palette.light, stroked: true });
   } else {
-    setPixel(grid, centerX, muzzleY + 2, palette.outline);
-    if (growthStage <= 1) {
-      // 口角が下がった不機嫌な顔
-      setPixel(grid, centerX - 2, muzzleY + 1, palette.outline);
-      setPixel(grid, centerX + 2, muzzleY + 1, palette.outline);
-    }
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 1.6 * scale, rx: 6.8 * scale, ry: 4.6 * scale, fill: palette.light });
   }
+  shapes.push({ kind: 'ellipse', cx: centerX, cy: muzzleY + 0.4 * scale, rx: 2.3 * scale, ry: 1.7 * scale, fill: palette.nose, stroked: true });
 
-  if (hasWhiskers && growthStage >= 3) {
+  if (hasWhiskers) {
     for (const direction of [-1, 1]) {
-      setPixel(grid, centerX + direction * 5, muzzleY, palette.outline);
-      setPixel(grid, centerX + direction * 6, muzzleY - 1, palette.outline);
-      setPixel(grid, centerX + direction * 6, muzzleY + 1, palette.outline);
+      for (const offset of [-2.2, 0, 2.2]) {
+        shapes.push({
+          kind: 'line',
+          x1: centerX + direction * 8 * scale,
+          y1: muzzleY + offset * scale,
+          x2: centerX + direction * 15 * scale,
+          y2: muzzleY + offset * 1.6 * scale,
+          stroke: palette.outline,
+          width: 0.8 * scale,
+          opacity: 0.7,
+        });
+      }
     }
   }
 }
 
-/** 段階0〜1では毛が抜けた斑を入れて、見るからに手入れされていない状態にする。 */
-function drawPatchyFur(
-  grid: SpriteGrid,
+/** えり・リボンなど、首まわりの飾り。頭より先に描き、あごの下から覗く自然な位置にする。 */
+function pushNeckwear(
+  shapes: MascotShape[],
+  palette: Palette,
+  style: AccessoryStyle,
+  centerX: number,
+  neckY: number,
+  bodyHalfWidth: number,
+  scale: number,
+): void {
+  if (style !== 'collar' && style !== 'ribbon') return;
+
+  shapes.push({
+    kind: 'ellipse',
+    cx: centerX,
+    cy: neckY,
+    rx: bodyHalfWidth * 0.78,
+    ry: 2.6 * scale,
+    fill: palette.accessoryDark,
+    stroked: true,
+  });
+
+  if (style === 'ribbon') {
+    for (const direction of [-1, 1]) {
+      shapes.push({
+        kind: 'path',
+        d: `M${centerX.toFixed(1)},${neckY.toFixed(1)} Q${(centerX + direction * 9 * scale).toFixed(1)},${(neckY - 6 * scale).toFixed(1)} ${(centerX + direction * 11 * scale).toFixed(1)},${neckY.toFixed(1)} Q${(centerX + direction * 9 * scale).toFixed(1)},${(neckY + 6 * scale).toFixed(1)} ${centerX.toFixed(1)},${neckY.toFixed(1)} Z`,
+        fill: palette.accessory,
+        stroked: true,
+      });
+    }
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: neckY, rx: 2.8 * scale, ry: 2.8 * scale, fill: palette.accessoryDark, stroked: true });
+  }
+}
+
+/** かんむり。頭より後に描き、いちばん手前にのせる。 */
+function pushCrown(
+  shapes: MascotShape[],
+  palette: Palette,
+  style: AccessoryStyle,
+  centerX: number,
+  crownBaseY: number,
+  scale: number,
+): void {
+  if (style !== 'crown' && style !== 'crownGem') return;
+
+  const top = Math.max(2, crownBaseY);
+  const width = (style === 'crownGem' ? 11 : 9.4) * scale;
+  const height = 8 * scale;
+  const points = [
+    [centerX - width, top + height],
+    [centerX - width, top + height * 0.4],
+    [centerX - width * 0.55, top + height * 0.75],
+    [centerX - width * 0.2, top],
+    [centerX, top + height * 0.5],
+    [centerX + width * 0.2, top],
+    [centerX + width * 0.55, top + height * 0.75],
+    [centerX + width, top + height * 0.4],
+    [centerX + width, top + height],
+  ];
+  const d = points.map((point, index) => `${index === 0 ? 'M' : 'L'}${point[0].toFixed(1)},${point[1].toFixed(1)}`).join(' ') + ' Z';
+  shapes.push({ kind: 'path', d, fill: palette.accessory, stroked: true });
+  if (style === 'crownGem') {
+    shapes.push({ kind: 'ellipse', cx: centerX, cy: top + height * 0.66, rx: 2.2 * scale, ry: 2.2 * scale, fill: palette.gem, stroked: true });
+    shapes.push({ kind: 'ellipse', cx: centerX - 0.7 * scale, cy: top + height * 0.55, rx: 0.7 * scale, ry: 0.7 * scale, fill: '#ffffff' });
+  }
+}
+
+function pushAura(
+  shapes: MascotShape[],
+  palette: Palette,
+  style: AuraStyle,
+  centerX: number,
+  centerY: number,
+  frame: number,
+): void {
+  if (style === 'none') return;
+
+  if (style === 'sparkle') {
+    const points =
+      frame === 0
+        ? [
+            [18, 20],
+            [80, 24],
+            [20, 74],
+            [78, 70],
+          ]
+        : [
+            [15, 30],
+            [82, 18],
+            [16, 65],
+            [83, 78],
+          ];
+    for (const [x, y] of points) {
+      shapes.push({ kind: 'path', d: starPath(x, y, 3.4), fill: palette.sparkle, opacity: 0.95 });
+    }
+    return;
+  }
+
+  const isBig = style === 'burstBig';
+  const innerRadius = isBig ? 36 : 32;
+  const spokes = isBig ? 12 : 9;
+  const spin = frame === 1 ? 8 : 0;
+
+  // やわらかい後光。半透明なので、どんな背景の上でも自然に馴染む
+  shapes.push({ kind: 'circle', cx: centerX, cy: centerY, r: innerRadius + (isBig ? 10 : 7), fill: palette.aura, opacity: 0.22 });
+  shapes.push({ kind: 'ring', cx: centerX, cy: centerY, r: innerRadius, stroke: palette.auraCore, width: isBig ? 2.6 : 2, opacity: 0.85 });
+
+  for (let index = 0; index < spokes; index += 1) {
+    const angle = ((360 / spokes) * index + spin) * (Math.PI / 180);
+    const long = index % 2 === 0;
+    const outer = innerRadius + (long ? (isBig ? 22 : 15) : isBig ? 14 : 9);
+    const x1 = centerX + Math.cos(angle) * (innerRadius - 2);
+    const y1 = centerY + Math.sin(angle) * (innerRadius - 2);
+    const x2 = centerX + Math.cos(angle) * outer;
+    const y2 = centerY + Math.sin(angle) * outer;
+    shapes.push({
+      kind: 'line',
+      x1,
+      y1,
+      x2,
+      y2,
+      stroke: long ? palette.flame : palette.aura,
+      width: long ? 4.2 : 2.6,
+      opacity: 0.95,
+    });
+  }
+
+  if (isBig) {
+    const sparklePoints: Array<[number, number]> =
+      frame === 0
+        ? [
+            [10, 12],
+            [90, 15],
+            [8, 85],
+            [92, 82],
+          ]
+        : [
+            [8, 22],
+            [92, 24],
+            [12, 75],
+            [88, 90],
+          ];
+    for (const [x, y] of sparklePoints) {
+      shapes.push({ kind: 'path', d: starPath(x, y, 3.2), fill: palette.sparkle, opacity: 0.95 });
+    }
+  }
+}
+
+function pushWings(
+  shapes: MascotShape[],
   palette: Palette,
   centerX: number,
   bodyCenterY: number,
   bodyHalfWidth: number,
+  scale: number,
+  lift: number,
 ): void {
-  const patches: Array<[number, number, number]> = [
-    [centerX - Math.round(bodyHalfWidth * 0.5), bodyCenterY - 2, 1.8],
-    [centerX + Math.round(bodyHalfWidth * 0.55), bodyCenterY + 2, 1.4],
-    [centerX + 2, bodyCenterY + 4, 1.2],
-  ];
-  for (const [x, y, radius] of patches) {
-    fillEllipse(grid, x, y, radius, radius * 0.8, palette.shade);
+  for (const direction of [-1, 1]) {
+    const originX = centerX + direction * (bodyHalfWidth - 3);
+    const originY = bodyCenterY - 8 * scale + lift;
+    shapes.push({
+      kind: 'path',
+      d: teardropPath(originX, originY, direction, 24 * scale, 11 * scale),
+      fill: palette.accessoryDark,
+      stroked: true,
+    });
+    shapes.push({
+      kind: 'path',
+      d: teardropPath(originX, originY - 2, direction, 15 * scale, 6 * scale),
+      fill: palette.accessory,
+    });
   }
 }
 
-function drawScruffyTufts(grid: SpriteGrid, palette: Palette, bodyHalfWidth: number): void {
-  // 段階の低いうちは毛が跳ねていて、輪郭がぼろぼろに見える
-  const tufts: Array<[number, number]> = [
-    [16 - Math.round(bodyHalfWidth) - 1, 22],
-    [16 + Math.round(bodyHalfWidth) + 1, 24],
-    [16 - Math.round(bodyHalfWidth), 27],
-    [10, 8],
-    [22, 7],
-    [16 + Math.round(bodyHalfWidth) + 1, 20],
-  ];
-  for (const [x, y] of tufts) setPixel(grid, x, y, palette.shade);
-}
-
-function drawAccessories(
-  grid: SpriteGrid,
+function pushTail(
+  shapes: MascotShape[],
   palette: Palette,
-  growthStage: number,
-  bodyTopY: number,
-  centerX: number,
-  bodyHalfWidth: number,
-  crownBaseY: number,
+  style: TailStyle,
+  tailX: number,
+  bodyCenterY: number,
+  scale: number,
+  frame: number,
 ): void {
-  if (growthStage >= 3) {
-    // 首輪
-    fillRect(grid, centerX - bodyHalfWidth + 1, bodyTopY, centerX + bodyHalfWidth - 1, bodyTopY, palette.accessoryDark);
-  }
-  if (growthStage >= 5) {
-    // リボン
-    fillTriangle(grid, centerX - 3, bodyTopY - 1, 2, 3, palette.accessory);
-    fillTriangle(grid, centerX + 3, bodyTopY - 1, 2, 3, palette.accessory);
-    setPixel(grid, centerX, bodyTopY, palette.accessory);
-  }
-  if (growthStage >= 7) {
-    // 王冠。頭のてっぺんに合わせて置く
-    const top = Math.max(0, crownBaseY);
-    fillRect(grid, centerX - 3, top + 1, centerX + 3, top + 2, palette.accessory);
-    setPixel(grid, centerX - 3, top, palette.accessory);
-    setPixel(grid, centerX, top, palette.accessory);
-    setPixel(grid, centerX + 3, top, palette.accessory);
-  }
-}
-
-function drawSparkles(grid: SpriteGrid, palette: Palette, growthStage: number, frame: number): void {
-  if (growthStage < 8) return;
-  const positions: Array<[number, number]> =
-    frame === 0
-      ? [
-          [4, 6],
-          [27, 10],
-          [6, 21],
-          [26, 24],
-        ]
-      : [
-          [5, 9],
-          [26, 7],
-          [3, 18],
-          [28, 21],
-        ];
-  for (const [x, y] of positions) {
-    setPixel(grid, x, y, palette.sparkle);
-    setPixel(grid, x - 1, y, palette.aura);
-    setPixel(grid, x + 1, y, palette.aura);
-    setPixel(grid, x, y - 1, palette.aura);
-    setPixel(grid, x, y + 1, palette.aura);
-  }
-}
-
-/** 体型・成長段階・調子からドット絵の格子をつくる。 */
-export function buildMascotGrid(input: MascotInput): SpriteGrid {
-  const { species, condition } = input;
-  const shapeValue = Math.min(1, Math.max(0, input.shapeValue));
-  const growthStage = Math.min(9, Math.max(0, Math.round(input.growthStage)));
-  const frame = input.frame === 1 ? 1 : 0;
-  const palette = buildPalette({ species, growthStage, condition });
-  const traits = SPECIES_TRAITS[species];
-  const grid = createGrid();
-
-  const droop = condition === 'exhausted' ? 1 : condition === 'tired' ? 0.5 : 0;
-  const bounce = frame === 1 && condition !== 'exhausted' ? -1 : 0;
-
-  const centerX = 16;
-  // 体型は胴の幅にいちばん強く出る。頬と足の太さにも少しだけ効かせる
-  const bodyHalfWidth = lerp(4.5, 11, shapeValue);
-  const bodyCenterY = 24 + bounce;
-  const bodyRadiusY = lerp(5.5, 7, shapeValue);
-  const bodyTopY = Math.round(bodyCenterY - bodyRadiusY);
-
-  const headRadiusX = lerp(7, 8.8, shapeValue * 0.6);
-  const headRadiusY = lerp(6.4, 7.4, shapeValue * 0.5);
-  // 段階が低いうちは頭が落ちて猫背に見える
-  const slouch = growthStage <= 1 ? 2 : growthStage <= 3 ? 1 : 0;
-  const headCenterY = 12 + bounce + Math.round(droop) + slouch;
-
-  // 翼は胴より先に描いて、後ろにあるように見せる
-  if (traits.hasWings) {
-    const lift = frame === 1 ? -1 : 0;
-    for (const direction of [-1, 1]) {
-      // 胴に重なる位置に置いて、生えているように見せる
-      fillEllipse(
-        grid,
-        centerX + direction * (bodyHalfWidth + 1.5),
-        bodyCenterY - 2 + lift,
-        3.4,
-        5.5,
-        palette.accessoryDark,
-      );
-    }
-  }
-
-  // 尻尾
-  const tailX = centerX + bodyHalfWidth;
-  switch (traits.tail) {
-    case 'long': {
-      const tailY = frame === 1 ? 20 : 22;
-      fillEllipse(grid, tailX + 3, tailY + 2, 1.4, 4.5, palette.shade);
-      fillEllipse(grid, tailX + 2, tailY + 6, 1.4, 2, palette.shade);
+  const wag = frame === 1 ? -1 : 1;
+  switch (style) {
+    case 'long':
+      shapes.push({
+        kind: 'path',
+        d: teardropPath(tailX, bodyCenterY, wag, 22 * scale, 5.4 * scale),
+        fill: palette.shade,
+        stroked: true,
+      });
+      shapes.push({ kind: 'ellipse', cx: tailX + wag * 20 * scale, cy: bodyCenterY - 12 * scale, rx: 4.2 * scale, ry: 4.2 * scale, fill: palette.light });
       break;
-    }
     case 'stubby':
-      fillEllipse(grid, tailX + 2, 23 + (frame === 1 ? -1 : 1), 2, 2.6, palette.shade);
+      shapes.push({ kind: 'ellipse', cx: tailX + 3 * scale, cy: bodyCenterY + 3 * wag * scale, rx: 5 * scale, ry: 6 * scale, fill: palette.shade, stroked: true });
       break;
     case 'puff':
-      fillEllipse(grid, tailX + 2, bodyCenterY + 2, 2.6, 2.6, palette.light);
+      shapes.push({ kind: 'circle', cx: tailX + 5 * scale, cy: bodyCenterY + 3 * scale, r: 7 * scale, fill: palette.light, stroked: true });
+      shapes.push({ kind: 'circle', cx: tailX + 5 * scale, cy: bodyCenterY + 3 * scale, r: 4.2 * scale, fill: palette.base });
       break;
     case 'tiny':
-      fillEllipse(grid, tailX + 1, bodyCenterY + 3, 1.4, 1.4, palette.shade);
+      shapes.push({ kind: 'circle', cx: tailX + 2.4 * scale, cy: bodyCenterY + 5 * scale, r: 3.4 * scale, fill: palette.shade, stroked: true });
       break;
     case 'spiky':
-      for (let step = 0; step < 4; step += 1) {
-        fillEllipse(grid, tailX + 2 + step, bodyCenterY + 1 + step, 1.6 - step * 0.3, 1.6 - step * 0.3, palette.shade);
+      for (let step = 0; step < 5; step += 1) {
+        const size = (4.6 - step * 0.6) * scale;
+        shapes.push({
+          kind: 'path',
+          d: teardropPath(tailX + (4 + step * 3.2) * scale, bodyCenterY + (2 + step * 2.6) * scale, 1, size * 1.8, size),
+          fill: step % 2 === 0 ? palette.base : palette.accessoryDark,
+          stroked: true,
+        });
       }
       break;
     case 'none':
     default:
       break;
   }
-
-  // 足
-  const footWidth = Math.round(lerp(2, 3.4, shapeValue));
-  fillRect(grid, centerX - bodyHalfWidth + 1, 29, centerX - bodyHalfWidth + footWidth, 30, palette.shade);
-  fillRect(grid, centerX + bodyHalfWidth - footWidth, 29, centerX + bodyHalfWidth - 1, 30, palette.shade);
-
-  // 胴
-  fillEllipse(grid, centerX, bodyCenterY, bodyHalfWidth, bodyRadiusY, palette.base);
-  if (traits.hasBellyPatch) {
-    // ぺんぎんの白いお腹。胴のほぼ全面を明るく塗る
-    fillEllipse(grid, centerX, bodyCenterY + 1, bodyHalfWidth * 0.78, bodyRadiusY * 0.88, palette.light);
-    // ひれ
-    for (const direction of [-1, 1]) {
-      fillEllipse(grid, centerX + direction * (bodyHalfWidth - 0.5), bodyCenterY, 1.4, 4, palette.shade);
-    }
-  } else {
-    fillEllipse(grid, centerX, bodyCenterY + 1, bodyHalfWidth * 0.55, bodyRadiusY * 0.7, palette.light);
-  }
-
-  if (shapeValue < 0.15) {
-    // がりがりのときは肋が浮いて見える
-    for (const offset of [-2, 0, 2]) {
-      fillRect(grid, centerX - 2, bodyCenterY + offset, centerX + 2, bodyCenterY + offset, palette.shade);
-    }
-  }
-
-  drawEars(grid, palette, traits.ears, centerX, headRadiusX, headCenterY, headRadiusY, droop);
-
-  // 頭
-  fillEllipse(grid, centerX, headCenterY, headRadiusX, headRadiusY, palette.base);
-  if (shapeValue > 0.78) {
-    // 頬がふくらむ
-    fillEllipse(grid, centerX - headRadiusX + 1, headCenterY + 2, 2.4, 2.2, palette.base);
-    fillEllipse(grid, centerX + headRadiusX - 1, headCenterY + 2, 2.4, 2.2, palette.base);
-  }
-
-  drawEyes(grid, palette, growthStage, condition, centerX - 3, centerX + 3, headCenterY);
-  drawMuzzle(grid, palette, traits.muzzle, traits.hasWhiskers, centerX, headCenterY + 4, growthStage);
-
-  if (growthStage >= 6 && condition !== 'exhausted') {
-    fillEllipse(grid, centerX - 6, headCenterY + 3, 1.6, 1.2, palette.blush);
-    fillEllipse(grid, centerX + 6, headCenterY + 3, 1.6, 1.2, palette.blush);
-  }
-
-  if (growthStage <= 2) drawScruffyTufts(grid, palette, bodyHalfWidth);
-  if (growthStage <= 1) drawPatchyFur(grid, palette, centerX, bodyCenterY, bodyHalfWidth);
-
-  // 耳が上に伸びる種は耳より上、それ以外は頭のてっぺんに王冠を乗せる
-  const earsRiseUp = traits.ears === 'pointed' || traits.ears === 'tall';
-  const crownBaseY = Math.round(
-    headCenterY - headRadiusY - (earsRiseUp ? 10 : 3) + droop * 2,
-  );
-  drawAccessories(
-    grid,
-    palette,
-    growthStage,
-    bodyTopY,
-    centerX,
-    Math.round(bodyHalfWidth),
-    crownBaseY,
-  );
-
-  addOutline(grid, palette.outline);
-
-  if (condition === 'exhausted') {
-    // 汗の雫
-    setPixel(grid, centerX + Math.round(headRadiusX) + 1, headCenterY - 3, '#8ec9e8');
-    setPixel(grid, centerX + Math.round(headRadiusX) + 1, headCenterY - 2, '#8ec9e8');
-  }
-
-  drawSparkles(grid, palette, growthStage, frame);
-
-  return grid;
 }
-
-export const GROWTH_STAGE_NAMES = [
-  'よれよれ',
-  'ぼさぼさ',
-  'すこし整った',
-  '毛づやが出た',
-  '目に光が戻った',
-  'きれいになってきた',
-  '見違えた',
-  '自慢の姿',
-  '輝いている',
-  '完成された姿',
-];

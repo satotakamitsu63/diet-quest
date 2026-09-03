@@ -2,7 +2,7 @@ import { GROWTH_STAGE_NAMES } from '../art/mascot';
 import type { AppData } from '../lib/types';
 import { buildProfileView } from '../logic/profileView';
 import { CONDITION_LABELS } from '../logic/score';
-import { MascotCanvas } from './MascotCanvas';
+import { MascotArt } from './MascotArt';
 
 type Props = {
   data: AppData;
@@ -36,12 +36,11 @@ export function FamilyBoard({ data, activeProfileId, currentUserId, onSelectProf
               className={isActive ? 'family-card is-active' : 'family-card'}
               onClick={() => onSelectProfile(profile.id)}
             >
-              <MascotCanvas
+              <MascotArt
                 species={profile.species}
                 shapeValue={view.character.shapeValue}
                 growthStage={view.character.growthStage}
                 condition={view.character.condition}
-                pixelSize={4}
                 animate={false}
               />
               <span className="family-name">

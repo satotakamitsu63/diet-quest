@@ -4,16 +4,22 @@ import type { CharacterCondition } from '../logic/score';
 export type Palette = {
   base: string;
   shade: string;
+  deepShade: string;
   light: string;
+  gloss: string;
   outline: string;
   eye: string;
+  eyeDark: string;
   eyeHighlight: string;
   nose: string;
   blush: string;
   accessory: string;
   accessoryDark: string;
+  gem: string;
   sparkle: string;
   aura: string;
+  auraCore: string;
+  flame: string;
 };
 
 type Hsl = { hue: number; saturation: number; lightness: number };
@@ -43,68 +49,107 @@ function toHex(hsl: Hsl): string {
 }
 
 function mix(from: Hsl, to: Hsl, ratio: number): Hsl {
+  const t = Math.min(1, Math.max(0, ratio));
   return {
-    hue: from.hue + (to.hue - from.hue) * ratio,
-    saturation: from.saturation + (to.saturation - from.saturation) * ratio,
-    lightness: from.lightness + (to.lightness - from.lightness) * ratio,
+    hue: from.hue + (to.hue - from.hue) * t,
+    saturation: from.saturation + (to.saturation - from.saturation) * t,
+    lightness: from.lightness + (to.lightness - from.lightness) * t,
   };
 }
 
-/** 段階0は毛づやのないくすんだ灰茶。段階が上がるほど本来の毛色に近づく。 */
-const DULL_COAT: Hsl = { hue: 28, saturation: 9, lightness: 36 };
+/** 育つ前のくすんだ毛色。彩度が低く、灰色がかっている。 */
+const DULL_COAT: Hsl = { hue: 32, saturation: 12, lightness: 40 };
 
+/**
+ * 育ちきったときの毛色。おもちゃのようにはっきりした彩度にして、
+ * 「かわいい・かっこいい」がひと目で伝わる色にする。
+ */
 const FINAL_COAT: Record<CharacterSpecies, Hsl> = {
-  cat: { hue: 38, saturation: 64, lightness: 71 },
-  dog: { hue: 24, saturation: 58, lightness: 60 },
-  rabbit: { hue: 345, saturation: 32, lightness: 86 },
-  bear: { hue: 18, saturation: 42, lightness: 46 },
-  penguin: { hue: 210, saturation: 30, lightness: 46 },
-  dragon: { hue: 148, saturation: 52, lightness: 52 },
+  cat: { hue: 34, saturation: 82, lightness: 72 },
+  dog: { hue: 26, saturation: 76, lightness: 62 },
+  rabbit: { hue: 336, saturation: 58, lightness: 88 },
+  bear: { hue: 22, saturation: 62, lightness: 50 },
+  penguin: { hue: 206, saturation: 55, lightness: 42 },
+  dragon: { hue: 150, saturation: 68, lightness: 54 },
+};
+
+/** 最終段階だけにのせる特別な輝き色。金属っぽい艶を出す。 */
+const LEGEND_TINT: Record<CharacterSpecies, Hsl> = {
+  cat: { hue: 46, saturation: 90, lightness: 78 },
+  dog: { hue: 40, saturation: 85, lightness: 68 },
+  rabbit: { hue: 320, saturation: 70, lightness: 90 },
+  bear: { hue: 38, saturation: 78, lightness: 58 },
+  penguin: { hue: 190, saturation: 75, lightness: 55 },
+  dragon: { hue: 160, saturation: 85, lightness: 60 },
 };
 
 const ACCESSORY_HUE: Record<CharacterSpecies, number> = {
   cat: 340,
-  dog: 200,
+  dog: 205,
   rabbit: 280,
+  bear: 42,
+  penguin: 20,
+  dragon: 52,
+};
+
+/** アクセサリーの宝石や後光に使う、種族ごとの輝き色。 */
+const AURA_HUE: Record<CharacterSpecies, number> = {
+  cat: 335,
+  dog: 40,
+  rabbit: 300,
   bear: 45,
-  penguin: 25,
-  dragon: 55,
+  penguin: 195,
+  dragon: 145,
 };
 
 export type PaletteInput = {
   species: CharacterSpecies;
-  /** 0〜9 */
-  growthStage: number;
+  /** 0（育つ前）〜1（完全に育った）。段階ごとに大きくジャンプしてよい */
+  coatMix: number;
   condition: CharacterCondition;
 };
 
 export function buildPalette(input: PaletteInput): Palette {
-  const progress = Math.min(1, Math.max(0, input.growthStage / 9));
-  const coat = mix(DULL_COAT, FINAL_COAT[input.species], progress);
+  const mixRatio = Math.min(1, Math.max(0, input.coatMix));
+  let coat = mix(DULL_COAT, FINAL_COAT[input.species], mixRatio);
+
+  // 最終段階の手前からは、通常の配色を超えて特別な輝きを混ぜる
+  if (mixRatio > 0.9) {
+    const legendRatio = (mixRatio - 0.9) / 0.1;
+    coat = mix(coat, LEGEND_TINT[input.species], legendRatio * 0.6);
+  }
 
   // やつれているときは彩度と明度を落として、見た目にすぐ分かるようにする
-  const fatigue = input.condition === 'exhausted' ? 0.45 : input.condition === 'tired' ? 0.18 : 0;
+  const fatigue =
+    input.condition === 'exhausted' ? 0.5 : input.condition === 'tired' ? 0.2 : 0;
   const adjusted: Hsl = {
     hue: coat.hue,
     saturation: coat.saturation * (1 - fatigue),
-    lightness: coat.lightness * (1 - fatigue * 0.25),
+    lightness: coat.lightness * (1 - fatigue * 0.22),
   };
 
-  const eyeLightness = 22 + progress * 12;
+  const eyeLightness = 30 + mixRatio * 8;
   const accessoryHue = ACCESSORY_HUE[input.species];
+  const auraHue = AURA_HUE[input.species];
 
   return {
     base: toHex(adjusted),
-    shade: toHex({ ...adjusted, lightness: adjusted.lightness - 14 }),
-    light: toHex({ ...adjusted, lightness: Math.min(94, adjusted.lightness + 16) }),
-    outline: toHex({ hue: adjusted.hue, saturation: 22, lightness: 16 + progress * 6 }),
-    eye: toHex({ hue: 205 - progress * 40, saturation: 20 + progress * 55, lightness: eyeLightness }),
+    shade: toHex({ ...adjusted, lightness: adjusted.lightness - 15 }),
+    deepShade: toHex({ ...adjusted, saturation: adjusted.saturation + 6, lightness: adjusted.lightness - 27 }),
+    light: toHex({ ...adjusted, lightness: Math.min(96, adjusted.lightness + 15) }),
+    gloss: toHex({ hue: adjusted.hue, saturation: Math.max(10, adjusted.saturation - 40), lightness: Math.min(99, adjusted.lightness + 30) }),
+    outline: toHex({ hue: adjusted.hue, saturation: 30, lightness: 14 + mixRatio * 4 }),
+    eye: toHex({ hue: 220 - mixRatio * 90, saturation: 35 + mixRatio * 55, lightness: eyeLightness }),
+    eyeDark: toHex({ hue: 220 - mixRatio * 90, saturation: 45 + mixRatio * 45, lightness: 16 }),
     eyeHighlight: '#ffffff',
-    nose: toHex({ hue: 348, saturation: 30 + progress * 30, lightness: 52 + progress * 10 }),
-    blush: toHex({ hue: 350, saturation: 70, lightness: 74 }),
-    accessory: toHex({ hue: accessoryHue, saturation: 62, lightness: 58 }),
-    accessoryDark: toHex({ hue: accessoryHue, saturation: 58, lightness: 40 }),
-    sparkle: '#fff6c9',
-    aura: toHex({ hue: accessoryHue + 20, saturation: 80, lightness: 72 }),
+    nose: toHex({ hue: 350, saturation: 55 + mixRatio * 25, lightness: 58 + mixRatio * 8 }),
+    blush: toHex({ hue: 350, saturation: 78, lightness: 76 }),
+    accessory: toHex({ hue: accessoryHue, saturation: 68, lightness: 60 }),
+    accessoryDark: toHex({ hue: accessoryHue, saturation: 64, lightness: 42 }),
+    gem: toHex({ hue: auraHue, saturation: 85, lightness: 62 }),
+    sparkle: '#fff8d6',
+    aura: toHex({ hue: auraHue, saturation: 85, lightness: 74 }),
+    auraCore: toHex({ hue: auraHue, saturation: 90, lightness: 88 }),
+    flame: toHex({ hue: auraHue - 25, saturation: 92, lightness: 66 }),
   };
 }
