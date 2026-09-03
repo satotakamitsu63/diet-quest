@@ -50,8 +50,13 @@ function toHex(hsl: Hsl): string {
 
 function mix(from: Hsl, to: Hsl, ratio: number): Hsl {
   const t = Math.min(1, Math.max(0, ratio));
+  // 色相は360度の輪なので、そのまま引き算すると遠回りする経路を通ることがある
+  // （例：橙32°→濃紺216°を直線で混ぜると、途中で無関係な緑を通ってしまう）。
+  // 差を±180度に折り返して、必ず近いほうの経路で混ぜる
+  let hueDiff = to.hue - from.hue;
+  hueDiff = ((hueDiff + 180) % 360 + 360) % 360 - 180;
   return {
-    hue: from.hue + (to.hue - from.hue) * t,
+    hue: from.hue + hueDiff * t,
     saturation: from.saturation + (to.saturation - from.saturation) * t,
     lightness: from.lightness + (to.lightness - from.lightness) * t,
   };
@@ -61,26 +66,40 @@ function mix(from: Hsl, to: Hsl, ratio: number): Hsl {
 const DULL_COAT: Hsl = { hue: 32, saturation: 12, lightness: 40 };
 
 /**
- * 育ちきったときの毛色。おもちゃのようにはっきりした彩度にして、
- * 「かわいい・かっこいい」がひと目で伝わる色にする。
+ * 育ちきったときの毛色。実際の動物の毛色・体色に寄せつつ、
+ * トイのようにはっきりした彩度で「かわいい・かっこいい」を出す。
  */
 const FINAL_COAT: Record<CharacterSpecies, Hsl> = {
-  cat: { hue: 34, saturation: 82, lightness: 72 },
-  dog: { hue: 26, saturation: 76, lightness: 62 },
-  rabbit: { hue: 336, saturation: 58, lightness: 88 },
-  bear: { hue: 22, saturation: 62, lightness: 50 },
-  penguin: { hue: 206, saturation: 55, lightness: 42 },
-  dragon: { hue: 150, saturation: 68, lightness: 54 },
+  cat: { hue: 30, saturation: 68, lightness: 64 }, // 茶トラのような、あたたかい橙色
+  dog: { hue: 32, saturation: 58, lightness: 56 }, // ゴールデン系の、やわらかい黄褐色
+  rabbit: { hue: 34, saturation: 20, lightness: 86 }, // クリーム〜グレージュ。ピンクにはしない
+  bear: { hue: 22, saturation: 52, lightness: 40 }, // 深みのある、しっかりした茶色
+  penguin: { hue: 216, saturation: 34, lightness: 15 }, // ほぼ黒に近い、青みがかった濃紺
+  dragon: { hue: 148, saturation: 62, lightness: 42 }, // 深みのあるエメラルドグリーン
 };
 
 /** 最終段階だけにのせる特別な輝き色。金属っぽい艶を出す。 */
 const LEGEND_TINT: Record<CharacterSpecies, Hsl> = {
-  cat: { hue: 46, saturation: 90, lightness: 78 },
-  dog: { hue: 40, saturation: 85, lightness: 68 },
-  rabbit: { hue: 320, saturation: 70, lightness: 90 },
-  bear: { hue: 38, saturation: 78, lightness: 58 },
-  penguin: { hue: 190, saturation: 75, lightness: 55 },
-  dragon: { hue: 160, saturation: 85, lightness: 60 },
+  cat: { hue: 40, saturation: 88, lightness: 72 },
+  dog: { hue: 38, saturation: 82, lightness: 66 },
+  rabbit: { hue: 40, saturation: 55, lightness: 92 },
+  bear: { hue: 34, saturation: 76, lightness: 54 },
+  penguin: { hue: 200, saturation: 70, lightness: 48 },
+  dragon: { hue: 158, saturation: 82, lightness: 56 },
+};
+
+/**
+ * 目の色相。種族ごとに固定し、色そのものでも見分けがつくようにする。
+ * ねこ＝グリーンアンバー、いぬ＝あたたかい茶、うさぎ＝赤み寄りの茶、
+ * くま＝ダークブラウン、ぺんぎん＝黒に近い紺、ドラゴン＝金色。
+ */
+const EYE_HUE: Record<CharacterSpecies, number> = {
+  cat: 96,
+  dog: 26,
+  rabbit: 14,
+  bear: 20,
+  penguin: 214,
+  dragon: 44,
 };
 
 const ACCESSORY_HUE: Record<CharacterSpecies, number> = {
@@ -129,6 +148,7 @@ export function buildPalette(input: PaletteInput): Palette {
   };
 
   const eyeLightness = 30 + mixRatio * 8;
+  const eyeHue = EYE_HUE[input.species];
   const accessoryHue = ACCESSORY_HUE[input.species];
   const auraHue = AURA_HUE[input.species];
 
@@ -139,8 +159,9 @@ export function buildPalette(input: PaletteInput): Palette {
     light: toHex({ ...adjusted, lightness: Math.min(96, adjusted.lightness + 15) }),
     gloss: toHex({ hue: adjusted.hue, saturation: Math.max(10, adjusted.saturation - 40), lightness: Math.min(99, adjusted.lightness + 30) }),
     outline: toHex({ hue: adjusted.hue, saturation: 30, lightness: 14 + mixRatio * 4 }),
-    eye: toHex({ hue: 220 - mixRatio * 90, saturation: 35 + mixRatio * 55, lightness: eyeLightness }),
-    eyeDark: toHex({ hue: 220 - mixRatio * 90, saturation: 45 + mixRatio * 45, lightness: 16 }),
+    // 目の色は種族ごとに固定した色相を使う。黒目（瞳孔）は小さく、瞳の色そのものを主役にする
+    eye: toHex({ hue: eyeHue, saturation: 42 + mixRatio * 40, lightness: eyeLightness }),
+    eyeDark: toHex({ hue: eyeHue, saturation: 55, lightness: 15 }),
     eyeHighlight: '#ffffff',
     nose: toHex({ hue: 350, saturation: 55 + mixRatio * 25, lightness: 58 + mixRatio * 8 }),
     blush: toHex({ hue: 350, saturation: 78, lightness: 76 }),
