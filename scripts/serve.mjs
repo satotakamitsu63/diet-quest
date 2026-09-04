@@ -6,9 +6,12 @@
 import { createServer } from 'node:http';
 import { readFileSync, statSync } from 'node:fs';
 import { networkInterfaces } from 'node:os';
+import { join, normalize } from 'node:path';
 
 const PORT = Number(process.env.PORT ?? 8766);
 const FILE = 'app.html';
+// キャラクターの絵は app.html に埋め込まず、public/characters から個別に配る
+const CHARACTERS_DIR = join('public', 'characters');
 
 try {
   statSync(FILE);
@@ -18,7 +21,24 @@ try {
 }
 
 createServer((request, response) => {
-  // 単一ファイルなので、どのパスで来ても同じものを返す
+  const url = new URL(request.url ?? '/', 'http://localhost');
+  if (url.pathname.startsWith('/characters/')) {
+    const relative = normalize(url.pathname.replace(/^\/characters\//, ''));
+    if (!relative.startsWith('..')) {
+      try {
+        const body = readFileSync(join(CHARACTERS_DIR, relative));
+        response.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=31536000' });
+        response.end(request.method === 'HEAD' ? undefined : body);
+        return;
+      } catch {
+        response.writeHead(404);
+        response.end();
+        return;
+      }
+    }
+  }
+
+  // それ以外は単一ファイルなので、どのパスで来ても同じものを返す
   const body = readFileSync(FILE);
   response.writeHead(200, {
     'Content-Type': 'text/html; charset=utf-8',

@@ -1,4 +1,4 @@
-import { GROWTH_STAGE_NAMES } from '../art/mascot';
+import { GROWTH_STAGE_NAMES } from '../lib/growthStages';
 import { formatShortDate } from '../lib/dates';
 import type { Profile } from '../lib/types';
 import type { ProfileView } from '../logic/profileView';

@@ -4,21 +4,20 @@ import type { Nutrients } from '../data/nutrients';
 import type { AwardCategory, AwardScale, ClubKey } from '../data/clubs';
 
 /**
- * 育てる系統。それぞれ3つの姿（幼体→中間形態→最終形態）に育つ。
- * 見た目は姿ごとに完全に別の動物になる（例：いぬ系統は子犬→中型犬→狼）。
+ * 育てる系統。9段階のイラスト（レベル1〜9）で育っていく。
+ * 見た目は手描きのイラストをそのまま使う（public/characters 以下）。
  */
-export type CharacterSpecies = 'dog' | 'cat' | 'bear' | 'chick' | 'sparrow' | 'penguin';
+export type CharacterSpecies = 'dog' | 'cat' | 'bear' | 'bird' | 'penguin';
 
 export const SPECIES_LABELS: Record<CharacterSpecies, string> = {
   dog: 'いぬ（→ おおかみ）',
   cat: 'ねこ（→ ライオン）',
   bear: 'くま（→ グリズリー）',
-  chick: 'ひよこ（→ フェニックス）',
-  sparrow: 'すずめ（→ ドラゴン）',
-  penguin: 'ペンギン（→ ひょうていおう）',
+  bird: 'とり（→ 翼竜）',
+  penguin: 'ペンギン（→ 氷の王者）',
 };
 
-export const SPECIES_KEYS: CharacterSpecies[] = ['dog', 'cat', 'bear', 'chick', 'sparrow', 'penguin'];
+export const SPECIES_KEYS: CharacterSpecies[] = ['dog', 'cat', 'bear', 'bird', 'penguin'];
 
 /** 受賞歴。対戦の評価点になる。 */
 export type Award = {

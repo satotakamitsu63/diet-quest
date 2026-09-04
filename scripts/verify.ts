@@ -20,7 +20,10 @@ import {
 import {
   buildHeightGoal, calculateHeightVelocity, predictAdultHeight, referenceVelocityRange,
 } from '../src/logic/heightGoal';
-import { buildMascotArtwork, type MascotShape } from '../src/art/mascot';
+import { characterImagePath, bodyConditionFromShape, levelFromGrowthStage } from '../src/lib/characterArt';
+import { SPECIES_KEYS } from '../src/lib/types';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import {
   ageMultiplier, awardMultiplier, buildBattleBuild, buildBattleStats,
   calculateAwardScore, physiqueMultiplier, resolveSpecialMoveName, simulateBattle,
@@ -473,97 +476,34 @@ console.log('\n== 週ごとのふりかえり ==');
     `${calculateDailyPenalty(emptyDay)}点`);
 }
 
-console.log('\n== キャラクターの見た目（SVG） ==');
-/** シルエットの大きさのおおよその目安。楕円・円の半径から面積相当の値を積み上げる。 */
-/** 図形全体のバウンディングボックス面積。姿によって胴が輪郭パス(path)で
- * 描かれるようになったので、楕円・円の面積合計ではなく実際の外形の
- * 大きさを見る。 */
-function approximateExtent(shapes: MascotShape[]): number {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  const consider = (x: number, y: number) => {
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  };
-  for (const shape of shapes) {
-    if (shape.kind === 'ellipse') {
-      consider(shape.cx - shape.rx, shape.cy - shape.ry);
-      consider(shape.cx + shape.rx, shape.cy + shape.ry);
-    } else if (shape.kind === 'circle') {
-      consider(shape.cx - shape.r, shape.cy - shape.r);
-      consider(shape.cx + shape.r, shape.cy + shape.r);
-    } else if (shape.kind === 'path') {
-      const numbers = shape.d.match(/-?\d+(\.\d+)?/g);
-      if (!numbers) continue;
-      for (let index = 0; index + 1 < numbers.length; index += 2) {
-        consider(Number(numbers[index]), Number(numbers[index + 1]));
+console.log('\n== キャラクターの見た目（手描きイラスト） ==');
+{
+  // 体型は3段階（痩せ・標準・デブ）に振り分けられること
+  check('体型0.1は痩せ', bodyConditionFromShape(0.1) === 'thin');
+  check('体型0.5は標準', bodyConditionFromShape(0.5) === 'normal');
+  check('体型0.9はデブ', bodyConditionFromShape(0.9) === 'fat');
+
+  // 成長段階0〜9が、イラストのレベル1〜9に対応すること（最終段階はレベル9を使い回す）
+  check('段階0はレベル1', levelFromGrowthStage(0) === 1);
+  check('段階8はレベル9', levelFromGrowthStage(8) === 9);
+  check('段階9もレベル9', levelFromGrowthStage(9) === 9);
+}
+{
+  // 5系統 × 3体型 × 9段階、すべての画像ファイルが実際に存在すること
+  const missing: string[] = [];
+  let total = 0;
+  for (const species of SPECIES_KEYS) {
+    for (const shapeValue of [0.1, 0.5, 0.9]) {
+      for (let stage = 0; stage <= 9; stage += 1) {
+        total += 1;
+        const relativePath = characterImagePath(species, shapeValue, stage);
+        const fullPath = path.join(process.cwd(), 'public', relativePath);
+        if (!existsSync(fullPath)) missing.push(relativePath);
       }
     }
   }
-  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return 0;
-  return Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
-}
-{
-  // 6系統すべてが描け、互いに違う見た目になっていること
-  const species = ['dog', 'cat', 'bear', 'chick', 'sparrow', 'penguin'] as const;
-  const signatures = new Map<string, string>();
-  for (const kind of species) {
-    const artwork = buildMascotArtwork({ species: kind, shapeValue: 0.5, growthStage: 5, condition: 'steady' });
-    check(`${kind} が描ける`, artwork.shapes.length > 15, `${artwork.shapes.length}個の図形`);
-    signatures.set(kind, JSON.stringify(artwork.shapes));
-  }
-  const unique = new Set(signatures.values());
-  check('6系統すべて違うシルエットになる', unique.size === species.length, `${unique.size}系統`);
-}
-{
-  // 同じ姿の中でも、段階が違えば見た目が変わること（9段階それぞれ別の絵）
-  const seen = new Set<string>();
-  for (let stage = 0; stage <= 9; stage += 1) {
-    const artwork = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: stage, condition: 'steady' });
-    seen.add(JSON.stringify(artwork.shapes));
-  }
-  check('10段階すべて見た目が違う', seen.size === 10, `${seen.size}種類`);
-}
-for (const stage of [0, 5, 9]) {
-  for (const shape of [0.05, 0.5, 0.95]) {
-    const artwork = buildMascotArtwork({ species: 'cat', shapeValue: shape, growthStage: stage, condition: 'steady' });
-    check(`段階${stage} 体型${shape} が描ける`, artwork.shapes.length > 15, `${artwork.shapes.length}個の図形`);
-  }
-}
-const thin = approximateExtent(
-  buildMascotArtwork({ species: 'dog', shapeValue: 0.05, growthStage: 5, condition: 'steady' }).shapes,
-);
-const fat = approximateExtent(
-  buildMascotArtwork({ species: 'dog', shapeValue: 0.95, growthStage: 5, condition: 'steady' }).shapes,
-);
-check('太いほうがシルエットが大きい', fat > thin, `細${thin.toFixed(0)} < 太${fat.toFixed(0)}`);
-
-{
-  // 進化するほど、全体の大きさがはっきり育っていくこと
-  const small = approximateExtent(
-    buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 0, condition: 'steady' }).shapes,
-  );
-  const legend = approximateExtent(
-    buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 9, condition: 'steady' }).shapes,
-  );
-  check('最終段階のほうが初期段階よりはっきり大きい', legend > small * 1.3,
-    `Lv.1=${small.toFixed(0)} → Lv.10=${legend.toFixed(0)}`);
-
-  // 最終段階だけの演出（翼・オーラ）が、他の種族にも咲く
-  const finalCat = buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 9, condition: 'steady' });
-  const midCat = buildMascotArtwork({ species: 'cat', shapeValue: 0.5, growthStage: 5, condition: 'steady' });
-  check('最終段階は演出が増えて図形数が多い', finalCat.shapes.length > midCat.shapes.length,
-    `Lv.6=${midCat.shapes.length} < Lv.10=${finalCat.shapes.length}`);
-
-  // やつれているときは、どの段階でも表情が変わること
-  const steadyDog = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: 8, condition: 'steady' });
-  const exhaustedDog = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: 8, condition: 'exhausted' });
-  check('やつれていると見た目が変わる（オーラが消えるなど）',
-    JSON.stringify(steadyDog.shapes) !== JSON.stringify(exhaustedDog.shapes));
+  check(`${SPECIES_KEYS.length}系統すべての画像がそろっている`, missing.length === 0,
+    missing.length === 0 ? `${total}枚を確認` : `不足: ${missing.slice(0, 5).join(', ')}`);
 }
 
 console.log(failures === 0 ? '\nすべて通りました。\n' : `\n${failures}件が失敗しました。\n`);

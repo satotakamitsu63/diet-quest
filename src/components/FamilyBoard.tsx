@@ -1,4 +1,4 @@
-import { GROWTH_STAGE_NAMES } from '../art/mascot';
+import { GROWTH_STAGE_NAMES } from '../lib/growthStages';
 import type { AppData } from '../lib/types';
 import { buildProfileView } from '../logic/profileView';
 import { CONDITION_LABELS } from '../logic/score';

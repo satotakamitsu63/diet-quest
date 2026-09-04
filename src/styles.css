@@ -120,6 +120,31 @@ a,
   border-radius: var(--radius);
   flex-shrink: 0;
   display: block;
+  object-fit: cover;
+  object-position: center 30%;
+}
+
+.mascot-art-animate {
+  animation: mascot-art-bob 2.4s ease-in-out infinite;
+}
+
+.mascot-art-tired {
+  filter: saturate(0.75) brightness(0.92);
+}
+
+.mascot-art-exhausted {
+  filter: saturate(0.4) brightness(0.8);
+}
+
+@keyframes mascot-art-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mascot-art-animate {
+    animation: none;
+  }
 }
 
 .mascot-card .mascot-art {
