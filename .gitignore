@@ -8,3 +8,6 @@ certs
 
 # TypeScript のビルドキャッシュ
 tsconfig.tsbuildinfo
+
+# キャラクターデザインの参考画像（容量が大きいのでリポジトリには含めない）
+クエスト用イラスト

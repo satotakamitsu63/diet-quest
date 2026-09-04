@@ -475,16 +475,41 @@ console.log('\n== 週ごとのふりかえり ==');
 
 console.log('\n== キャラクターの見た目（SVG） ==');
 /** シルエットの大きさのおおよその目安。楕円・円の半径から面積相当の値を積み上げる。 */
+/** 図形全体のバウンディングボックス面積。姿によって胴が輪郭パス(path)で
+ * 描かれるようになったので、楕円・円の面積合計ではなく実際の外形の
+ * 大きさを見る。 */
 function approximateExtent(shapes: MascotShape[]): number {
-  return shapes.reduce((total, shape) => {
-    if (shape.kind === 'ellipse') return total + shape.rx * shape.ry;
-    if (shape.kind === 'circle') return total + shape.r * shape.r;
-    return total;
-  }, 0);
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  const consider = (x: number, y: number) => {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  };
+  for (const shape of shapes) {
+    if (shape.kind === 'ellipse') {
+      consider(shape.cx - shape.rx, shape.cy - shape.ry);
+      consider(shape.cx + shape.rx, shape.cy + shape.ry);
+    } else if (shape.kind === 'circle') {
+      consider(shape.cx - shape.r, shape.cy - shape.r);
+      consider(shape.cx + shape.r, shape.cy + shape.r);
+    } else if (shape.kind === 'path') {
+      const numbers = shape.d.match(/-?\d+(\.\d+)?/g);
+      if (!numbers) continue;
+      for (let index = 0; index + 1 < numbers.length; index += 2) {
+        consider(Number(numbers[index]), Number(numbers[index + 1]));
+      }
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return 0;
+  return Math.max(0, maxX - minX) * Math.max(0, maxY - minY);
 }
 {
-  // 6種類すべてが描け、互いに違う見た目になっていること
-  const species = ['cat', 'dog', 'rabbit', 'bear', 'penguin', 'dragon'] as const;
+  // 6系統すべてが描け、互いに違う見た目になっていること
+  const species = ['dog', 'cat', 'bear', 'chick', 'sparrow', 'penguin'] as const;
   const signatures = new Map<string, string>();
   for (const kind of species) {
     const artwork = buildMascotArtwork({ species: kind, shapeValue: 0.5, growthStage: 5, condition: 'steady' });
@@ -492,7 +517,16 @@ function approximateExtent(shapes: MascotShape[]): number {
     signatures.set(kind, JSON.stringify(artwork.shapes));
   }
   const unique = new Set(signatures.values());
-  check('6種類すべて違うシルエットになる', unique.size === species.length, `${unique.size}種類`);
+  check('6系統すべて違うシルエットになる', unique.size === species.length, `${unique.size}系統`);
+}
+{
+  // 同じ姿の中でも、段階が違えば見た目が変わること（9段階それぞれ別の絵）
+  const seen = new Set<string>();
+  for (let stage = 0; stage <= 9; stage += 1) {
+    const artwork = buildMascotArtwork({ species: 'dog', shapeValue: 0.5, growthStage: stage, condition: 'steady' });
+    seen.add(JSON.stringify(artwork.shapes));
+  }
+  check('10段階すべて見た目が違う', seen.size === 10, `${seen.size}種類`);
 }
 for (const stage of [0, 5, 9]) {
   for (const shape of [0.05, 0.5, 0.95]) {
