@@ -29,7 +29,7 @@ const CASES: Case[] = [
   { utterance: 'ポテトチップス1袋', expect: ['ポテトチップス'], grams: { ポテトチップス: 60 } },
   { utterance: '卵かけご飯', expect: ['卵', 'ごはん'] },
   { utterance: 'ごはん軽く1杯', expect: ['ごはん'], grams: { ごはん: 105 } },
-  { utterance: 'トースト1枚とゆで卵1個', expect: ['食パン', '卵'], grams: { 卵: 50 } },
+  { utterance: 'トースト1枚とゆで卵1個', expect: ['食パン', 'ゆで卵'], grams: { ゆで卵: 50 } },
   { utterance: 'プロテイン飲んだ', expect: ['プロテイン'] },
   { utterance: '白米お茶碗1杯', expect: ['ごはん'], grams: { ごはん: 150 } },
   { utterance: '野菜炒めとご飯大盛り', expect: ['野菜炒め', 'ごはん'], grams: { ごはん: 225, 野菜炒め: 200 } },
@@ -41,7 +41,7 @@ const CASES: Case[] = [
   { utterance: '納豆ご飯と味噌汁', expect: ['納豆', 'ごはん', '味噌汁'] },
   { utterance: 'コーヒーにミルク入れて飲みました', expect: ['コーヒー'] },
   { utterance: 'さつまいも半分', expect: ['さつまいも'], grams: { さつまいも: 50 } },
-  { utterance: 'ブロッコリーとゆで卵のサラダ', expect: ['ブロッコリー', '卵', 'サラダ'] },
+  { utterance: 'ブロッコリーとゆで卵のサラダ', expect: ['ブロッコリー', 'ゆで卵', 'サラダ'] },
   { utterance: '焼き鮭定食', expect: ['鮭の塩焼き'] },
   { utterance: 'チーズ2個とワイン', expect: ['チーズ', 'ワイン'], grams: { チーズ: 36 } },
   { utterance: 'お寿司10貫', expect: ['寿司'], grams: { 寿司: 220 } },
@@ -51,6 +51,8 @@ const CASES: Case[] = [
   { utterance: '鶏むね肉200グラム', expect: ['鶏むね肉'], grams: { 鶏むね肉: 200 } },
   { utterance: '醤油ラーメン', expect: ['ラーメン'], reject: ['サラダ油'] },
   { utterance: '玄米ごはん一膳', expect: ['玄米ごはん'], reject: ['ごはん'], grams: { 玄米ごはん: 150 } },
+  { utterance: 'サラダチキン食べた', expect: ['サラダチキン'], reject: ['サラダ'], grams: { サラダチキン: 100 } },
+  { utterance: 'コンビニで肉まんとカップ麺買って食べた', expect: ['肉まん', 'カップ麺'] },
 ];
 
 let failures = 0;
