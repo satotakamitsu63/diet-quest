@@ -1,12 +1,22 @@
 import { useMemo, useState } from 'react';
 import { FOODS_BY_ID } from '../data/foods';
 import { scaleNutrients } from '../data/nutrients';
-import { todayKey } from '../lib/dates';
+import { formatShortDate, recentDateKeys } from '../lib/dates';
 import { createId } from '../lib/repository';
 import { MEAL_SLOT_LABELS, type MealItem, type MealLog, type MealSlot, type Profile } from '../lib/types';
 import { createMealItem, parseSpokenMeal, searchFoods } from '../logic/parseSpokenMeal';
 
 const SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+/** さかのぼって記録できる日数。それより前は「思い出せない日」として週次ふりかえりの対象外にする */
+const PAST_DAYS_EDITABLE = 3;
+
+/** 日付選択チップ用のラベル。今日・昨日だけ言い方を変え、それ以前は月/日(曜)にする */
+function dateChipLabel(dateKey: string): string {
+  const [yesterday, today] = recentDateKeys(2);
+  if (dateKey === today) return '今日';
+  if (dateKey === yesterday) return '昨日';
+  return formatShortDate(dateKey);
+}
 
 /** 文中で食事の区分が指定されていなかったときに、時刻から推測する。 */
 function guessSlot(): MealSlot {
@@ -29,9 +39,12 @@ type EditableGroup = {
 type Props = {
   profile: Profile;
   onSave: (log: MealLog) => Promise<void>;
+  /** 記録する日（YYYY-MM-DD）。今日から数日さかのぼって指定できる */
+  date: string;
+  onDateChange: (date: string) => void;
 };
 
-export function MealRecorder({ profile, onSave }: Props) {
+export function MealRecorder({ profile, onSave, date, onDateChange }: Props) {
   const [text, setText] = useState('');
   const [groups, setGroups] = useState<EditableGroup[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
@@ -104,7 +117,7 @@ export function MealRecorder({ profile, onSave }: Props) {
         await onSave({
           id: createId(),
           profileId: profile.id,
-          date: todayKey(),
+          date,
           slot: group.slot,
           rawText: '',
           items: group.items,
@@ -128,6 +141,25 @@ export function MealRecorder({ profile, onSave }: Props) {
         下の欄をタップして、キーボードの<strong>マイクキー</strong>を押すと話して入力できます。
         「朝食は〜、昼は〜」のようにまとめて言えば、朝・昼・晩・間食に自動で振り分けます。
       </p>
+
+      <div className="chip-row">
+        {recentDateKeys(PAST_DAYS_EDITABLE + 1)
+          .slice()
+          .reverse()
+          .map((dateKey) => (
+            <button
+              key={dateKey}
+              type="button"
+              className={dateKey === date ? 'chip is-active' : 'chip'}
+              onClick={() => onDateChange(dateKey)}
+            >
+              {dateChipLabel(dateKey)}
+            </button>
+          ))}
+      </div>
+      {date !== recentDateKeys(1)[0] && (
+        <p className="note">{formatShortDate(date)}の記録として保存します。</p>
+      )}
 
       <textarea
         className="text-input"

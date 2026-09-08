@@ -12,7 +12,7 @@ import { useAppData } from './hooks/useAppData';
 import { findLatestBodyLog } from './logic/bodyGoal';
 import { buildProfileView } from './logic/profileView';
 import { MEAL_SLOT_LABELS } from './lib/types';
-import { todayKey } from './lib/dates';
+import { formatShortDate, todayKey } from './lib/dates';
 
 type Tab = 'home' | 'record' | 'body' | 'battle' | 'family' | 'settings';
 
@@ -55,6 +55,8 @@ function AppContent() {
   const [tab, setTab] = useState<Tab>('home');
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [isAddingProfile, setIsAddingProfile] = useState(false);
+  /** 「きろく」タブでどの日の記録として保存・表示するか */
+  const [recordDate, setRecordDate] = useState(todayKey());
 
   const activeProfile =
     state.data.profiles.find((profile) => profile.id === state.data.activeProfileId) ??
@@ -66,14 +68,14 @@ function AppContent() {
     [activeProfile, state.data],
   );
 
-  const todaysLogs = useMemo(
+  const recordDateLogs = useMemo(
     () =>
       activeProfile
         ? state.data.mealLogs
-            .filter((log) => log.profileId === activeProfile.id && log.date === todayKey())
+            .filter((log) => log.profileId === activeProfile.id && log.date === recordDate)
             .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
         : [],
-    [activeProfile, state.data.mealLogs],
+    [activeProfile, state.data.mealLogs, recordDate],
   );
 
   if (state.isLoading) {
@@ -126,14 +128,22 @@ function AppContent() {
 
         {tab === 'record' && activeProfile && (
           <>
-            <MealRecorder key={activeProfile.id} profile={activeProfile} onSave={state.saveMealLog} />
+            <MealRecorder
+              key={activeProfile.id}
+              profile={activeProfile}
+              onSave={state.saveMealLog}
+              date={recordDate}
+              onDateChange={setRecordDate}
+            />
             <section className="card">
-              <h2 className="card-title">今日の記録</h2>
-              {todaysLogs.length === 0 ? (
+              <h2 className="card-title">
+                {recordDate === todayKey() ? '今日の記録' : `${formatShortDate(recordDate)}の記録`}
+              </h2>
+              {recordDateLogs.length === 0 ? (
                 <p className="note">まだ記録がありません。</p>
               ) : (
                 <ul className="log-list">
-                  {todaysLogs.map((log) => (
+                  {recordDateLogs.map((log) => (
                     <li key={log.id}>
                       <div className="log-head">
                         <strong>{MEAL_SLOT_LABELS[log.slot]}</strong>
