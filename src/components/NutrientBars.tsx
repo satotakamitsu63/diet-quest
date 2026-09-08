@@ -11,6 +11,8 @@ const BOOSTED_KEYS: NutrientKey[] = [
   'vitaminB1',
   'vitaminB2',
   'vitaminC',
+  'vitaminE',
+  'zinc',
 ];
 
 function formatValue(value: number, unit: string): string {

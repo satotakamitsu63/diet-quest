@@ -20,6 +20,8 @@ const WATCHED_NUTRIENTS: NutrientKey[] = [
   'vitaminB1',
   'vitaminB2',
   'vitaminC',
+  'vitaminE',
+  'zinc',
 ];
 
 /**

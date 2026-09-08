@@ -13,6 +13,8 @@ export type Nutrients = {
   vitaminC: number; // mg
   vitaminD: number; // μg
   salt: number; // g（食塩相当量）
+  vitaminE: number; // mg（肌の健康にかかわる。日焼けや乾燥からの回復を助ける抗酸化ビタミン）
+  zinc: number; // mg（肌の健康にかかわる。皮膚のターンオーバーに必要なミネラル）
 };
 
 export type NutrientKey = keyof Nutrients;
@@ -31,6 +33,8 @@ export const NUTRIENT_KEYS: NutrientKey[] = [
   'vitaminC',
   'vitaminD',
   'salt',
+  'vitaminE',
+  'zinc',
 ];
 
 export const NUTRIENT_LABELS: Record<NutrientKey, string> = {
@@ -47,6 +51,8 @@ export const NUTRIENT_LABELS: Record<NutrientKey, string> = {
   vitaminC: 'ビタミンC',
   vitaminD: 'ビタミンD',
   salt: '食塩相当量',
+  vitaminE: 'ビタミンE',
+  zinc: '亜鉛',
 };
 
 export const NUTRIENT_UNITS: Record<NutrientKey, string> = {
@@ -63,6 +69,8 @@ export const NUTRIENT_UNITS: Record<NutrientKey, string> = {
   vitaminC: 'mg',
   vitaminD: 'μg',
   salt: 'g',
+  vitaminE: 'mg',
+  zinc: 'mg',
 };
 
 export function createEmptyNutrients(): Nutrients {
@@ -80,6 +88,8 @@ export function createEmptyNutrients(): Nutrients {
     vitaminC: 0,
     vitaminD: 0,
     salt: 0,
+    vitaminE: 0,
+    zinc: 0,
   };
 }
 

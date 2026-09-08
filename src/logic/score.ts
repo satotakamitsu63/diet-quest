@@ -90,6 +90,8 @@ const BASE_WEIGHTS: Partial<Record<NutrientKey, number>> = {
   vitaminA: 0.05,
   vitaminB1: 0.04,
   vitaminB2: 0.04,
+  vitaminE: 0.03,
+  zinc: 0.03,
   salt: 0.05,
 };
 
@@ -105,6 +107,8 @@ const BONE_FOCUSED_WEIGHTS: Partial<Record<NutrientKey, number>> = {
   vitaminA: 0.04,
   vitaminB1: 0.03,
   vitaminB2: 0.03,
+  vitaminE: 0.02,
+  zinc: 0.03,
   salt: 0.01,
 };
 

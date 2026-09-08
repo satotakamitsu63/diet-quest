@@ -53,6 +53,8 @@ const CASES: Case[] = [
   { utterance: '玄米ごはん一膳', expect: ['玄米ごはん'], reject: ['ごはん'], grams: { 玄米ごはん: 150 } },
   { utterance: 'サラダチキン食べた', expect: ['サラダチキン'], reject: ['サラダ'], grams: { サラダチキン: 100 } },
   { utterance: 'コンビニで肉まんとカップ麺買って食べた', expect: ['肉まん', 'カップ麺'] },
+  { utterance: 'マルチビタミン飲んだ', expect: ['マルチビタミン'], grams: { マルチビタミン: 1 } },
+  { utterance: 'ビタミンCサプリ2粒とビタミンDサプリ', expect: ['ビタミンCサプリ', 'ビタミンDサプリ'], grams: { ビタミンCサプリ: 2, ビタミンDサプリ: 1 } },
 ];
 
 let failures = 0;
