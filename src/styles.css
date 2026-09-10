@@ -997,6 +997,10 @@ a,
   border-left-color: var(--text-muted);
 }
 
+.advice.is-caution {
+  border-left-color: var(--accent);
+}
+
 .advice.is-praise {
   border-left-color: var(--good);
 }

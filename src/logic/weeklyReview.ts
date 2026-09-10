@@ -37,11 +37,21 @@ export const PENALTY = {
   energyShortfall: -10,
   saltExcess: -5,
   missingRecord: -2,
+  /** 脂質・糖質を目標より多く摂った日のペナルティ。食べた内容の罰としては最も重くする */
+  macroExcess: -12,
+  /** 1週間通して脂質・糖質が少なすぎたときの、注意ぶんの小さな減点 */
+  macroCaution: -3,
 } as const;
 
 const SEVERE_RATIO = 0.5;
 const MILD_RATIO = 0.7;
 const SALT_LIMIT_RATIO = 1.3;
+/** これを超えたら「脂質・糖質の摂りすぎ」の日として数える。食塩よりも早めに反応させる */
+const MACRO_EXCESS_RATIO = 1.2;
+/** 1週間平均でこれを下回ったら「少なすぎ」の注意を出す。1日単位では減点しない */
+const MACRO_LOW_RATIO = 0.6;
+const MACRO_KEYS: NutrientKey[] = ['fat', 'carbohydrate'];
+const MACRO_LABELS: Record<string, string> = { fat: '脂質', carbohydrate: '糖質' };
 
 /** 単体で食べるものではないので、不足を埋める提案には出さない。 */
 const SEASONING_IDS = new Set(['oil', 'butter', 'mayonnaise', 'dressing']);
@@ -80,7 +90,7 @@ export type FoodContribution = {
 };
 
 export type WeeklyAdvice = {
-  kind: 'shortfall' | 'excess' | 'consistency' | 'praise';
+  kind: 'shortfall' | 'excess' | 'consistency' | 'praise' | 'caution';
   headline: string;
   detail: string;
   actions: string[];
@@ -227,10 +237,34 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
     0,
   );
 
+  // 脂質・糖質：摂りすぎた日は1日ごとに重く減点し、逆に1週間通して少なすぎたときだけ
+  // まとめて小さく減点する（少ない日が単発あっても減点しない）
+  const macroExcessPenalty: Partial<Record<NutrientKey, number>> = {};
+  const macroAverageRatio: Partial<Record<NutrientKey, number>> = {};
+  const macroCautionPenalty: Partial<Record<NutrientKey, number>> = {};
+  for (const key of MACRO_KEYS) {
+    macroExcessPenalty[key] = recorded.reduce(
+      (total, summary) => total + (summary.ratios[key] > MACRO_EXCESS_RATIO ? PENALTY.macroExcess : 0),
+      0,
+    );
+    const withTarget = recorded.filter((summary) => summary.targets[key] > 0);
+    const averageRatio =
+      withTarget.length === 0
+        ? 1
+        : withTarget.reduce((total, summary) => total + summary.ratios[key], 0) / withTarget.length;
+    macroAverageRatio[key] = averageRatio;
+    macroCautionPenalty[key] =
+      withTarget.length > 0 && averageRatio < MACRO_LOW_RATIO ? PENALTY.macroCaution : 0;
+  }
+  const macroExcessTotal = MACRO_KEYS.reduce((total, key) => total + (macroExcessPenalty[key] ?? 0), 0);
+  const macroCautionTotal = MACRO_KEYS.reduce((total, key) => total + (macroCautionPenalty[key] ?? 0), 0);
+
   const penaltyPoints =
     nutrients.reduce((total, entry) => total + entry.penalty, 0) +
     energyPenalty +
     saltPenalty +
+    macroExcessTotal +
+    macroCautionTotal +
     missingRecordPenalty;
 
   const averageScore =
@@ -313,6 +347,49 @@ export function buildWeeklyReview(input: WeeklyReviewInput): WeeklyReview {
         '漬物・加工肉を毎日から隔日にする',
         '味噌汁を1日2杯から1杯にする（約1g減る）',
       ],
+    });
+  }
+
+  const MACRO_EXCESS_ACTIONS: Record<string, string[]> = {
+    fat: ['揚げ物を食べる回数を減らす', '脂の多い肉より赤身肉・鶏むね肉に変える', 'ドレッシング・マヨネーズを控える'],
+    carbohydrate: ['ごはん・パン・麺の量を少し減らす', '間食の甘いものを控える', '丼物より定食にする'],
+  };
+  const MACRO_CAUTION_ACTIONS: Record<string, string[]> = {
+    fat: ['オリーブオイルやナッツを少量足す', '鮭・さばなど脂ののった魚を週に増やす'],
+    carbohydrate: ['主食（ごはん・パン・麺）を1食できちんと食べる'],
+  };
+
+  // 脂質・糖質の摂りすぎ（食べた内容の罰としては最も重い）
+  for (const key of MACRO_KEYS) {
+    const excess = macroExcessPenalty[key] ?? 0;
+    if (excess >= 0) continue;
+    const days = excess / PENALTY.macroExcess;
+    const heavyFoods = aggregateContributions(logs, dateKeys, profileId, key).slice(0, 3);
+    advice.push({
+      kind: 'excess',
+      headline: `${MACRO_LABELS[key]}を目標より多く摂った日が ${days}日 ありました（${excess}点）`,
+      detail:
+        heavyFoods.length > 0
+          ? `この1週間で${MACRO_LABELS[key]}がいちばん多かったのは ${heavyFoods
+              .map((food) => `${food.name}（週${food.times}回で${formatAmount(food.amount, NUTRIENT_UNITS[key])}）`)
+              .join('、')} です。`
+          : '量を少し減らすだけでも変わります。',
+      actions: MACRO_EXCESS_ACTIONS[key],
+    });
+  }
+
+  // 脂質・糖質が1週間通して少なすぎるときだけ、注意として小さく減点
+  for (const key of MACRO_KEYS) {
+    const caution = macroCautionPenalty[key] ?? 0;
+    if (caution >= 0) continue;
+    advice.push({
+      kind: 'caution',
+      headline: `${MACRO_LABELS[key]}が1週間通して少なめでした（${caution}点）`,
+      detail:
+        key === 'fat'
+          ? `充足率は平均 ${Math.round((macroAverageRatio.fat ?? 0) * 100)}% でした。脂質は体づくりやホルモンの材料にもなるので、極端に減らしすぎないようにしましょう。`
+          : `充足率は平均 ${Math.round((macroAverageRatio.carbohydrate ?? 0) * 100)}% でした。糖質を極端に減らすと、エネルギー不足で疲れやすくなることがあります。`,
+      actions: MACRO_CAUTION_ACTIONS[key],
     });
   }
 

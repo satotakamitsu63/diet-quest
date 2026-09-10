@@ -128,7 +128,7 @@ export function buildNutrientTargets(input: ReferenceInput): NutrientTargets {
       vitaminE: row[16],
       zinc: row[17],
     },
-    limited: ['salt', 'fat'],
+    limited: ['salt', 'fat', 'carbohydrate'],
     boosted: [
       'protein',
       'fiber',

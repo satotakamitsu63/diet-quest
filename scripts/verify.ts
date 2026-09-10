@@ -474,6 +474,20 @@ console.log('\n== 週ごとのふりかえり ==');
   const emptyDay = summarizeDay({ date: '2026-09-30', profile, age: 40, logs: [], targets });
   check('記録がない日は−2点（食べた内容が悪い日より軽い罰にする）', calculateDailyPenalty(emptyDay) === -2,
     `${calculateDailyPenalty(emptyDay)}点`);
+
+  const heavyMealText = 'ポテトチップス1袋、チョコレート1枚、ラーメン、カレーライス、ドーナツ2個、コロッケ3個、ごはん3膳、もち3個';
+  const heavySummary = summarizeDay({
+    date: '2026-09-15', profile, age: 40,
+    logs: [makeMealLog('2026-09-15', heavyMealText)],
+    targets,
+  });
+  check('脂質・糖質を大きく超えると得点が下がる',
+    heavySummary.ratios.fat > 1.2 && heavySummary.ratios.carbohydrate > 1.2 && (heavySummary.score ?? 100) < 50,
+    `脂質${Math.round(heavySummary.ratios.fat * 100)}% 糖質${Math.round(heavySummary.ratios.carbohydrate * 100)}% スコア${heavySummary.score}点`);
+
+  check('脂質・糖質が少なめの週は「注意」の小さい減点で済む（不足の重い罰ではない）',
+    review.advice.some((entry) => entry.kind === 'caution'),
+    review.advice.filter((entry) => entry.kind === 'caution').map((entry) => entry.headline).join(' / '));
 }
 
 console.log('\n== キャラクターの見た目（手描きイラスト） ==');

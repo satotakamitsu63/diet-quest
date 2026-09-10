@@ -81,6 +81,8 @@ export function applyGrowthBoost(input: GrowthBoostInput): Nutrients {
 
 const BASE_WEIGHTS: Partial<Record<NutrientKey, number>> = {
   energy: 0.25,
+  fat: 0.28,
+  carbohydrate: 0.28,
   protein: 0.15,
   calcium: 0.1,
   iron: 0.1,
@@ -95,9 +97,11 @@ const BASE_WEIGHTS: Partial<Record<NutrientKey, number>> = {
   salt: 0.05,
 };
 
-/** 成長期と審美系競技では、骨と血をつくる栄養素の重みを上げる。 */
+/** 成長期と審美系競技では、骨と血をつくる栄養素の重みを上げる。それでも脂質・糖質の摂りすぎは最も重く見る。 */
 const BONE_FOCUSED_WEIGHTS: Partial<Record<NutrientKey, number>> = {
   energy: 0.24,
+  fat: 0.26,
+  carbohydrate: 0.26,
   protein: 0.14,
   calcium: 0.15,
   iron: 0.15,
@@ -125,6 +129,15 @@ function scoreShortfall(ratio: number): number {
 function scoreExcess(ratio: number): number {
   if (ratio <= 1) return 1;
   return Math.max(0, 1 - (ratio - 1) / 0.6);
+}
+
+/**
+ * 脂質・糖質の摂りすぎ専用の、salt よりも急に0へ落ちる得点。
+ * 少なすぎるほうは減点しない（食べた内容の罰は「摂りすぎ」だけに絞る）。
+ */
+function scoreExcessSteep(ratio: number): number {
+  if (ratio <= 1) return 1;
+  return Math.max(0, 1 - (ratio - 1) / 0.3);
 }
 
 /** エネルギーの得点。多すぎても少なすぎても下がる山型。 */
@@ -177,16 +190,22 @@ export function summarizeDay(input: DailySummaryInput): DailySummary {
     if (targets[key] <= 0) continue;
     const ratio = ratios[key];
     const value =
-      key === 'energy' ? scoreEnergy(ratio) : key === 'salt' ? scoreExcess(ratio) : scoreShortfall(ratio);
+      key === 'energy'
+        ? scoreEnergy(ratio)
+        : key === 'fat' || key === 'carbohydrate'
+          ? scoreExcessSteep(ratio)
+          : key === 'salt'
+            ? scoreExcess(ratio)
+            : scoreShortfall(ratio);
     weightedScore += value * weight;
     weightTotal += weight;
   }
 
   const shortfalls = NUTRIENT_KEYS.filter(
-    (key) => key !== 'salt' && key !== 'fat' && targets[key] > 0 && ratios[key] < 0.7,
+    (key) => key !== 'salt' && key !== 'fat' && key !== 'carbohydrate' && targets[key] > 0 && ratios[key] < 0.7,
   );
   const excesses = NUTRIENT_KEYS.filter(
-    (key) => (key === 'salt' || key === 'energy' || key === 'fat') && ratios[key] > 1.2,
+    (key) => (key === 'salt' || key === 'energy' || key === 'fat' || key === 'carbohydrate') && ratios[key] > 1.2,
   );
 
   return {
