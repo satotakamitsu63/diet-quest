@@ -28,13 +28,15 @@ const WATCHED_NUTRIENTS: NutrientKey[] = [
  * マイナス点の付け方。数えられる形にして、なぜその点数かを説明できるようにする。
  * 1日ごとに、目標の50%未満なら-10点、70%未満なら-5点。
  * まったく食べていない日でおよそ-100点になり、0〜100点のスコアと同じ桁で読める。
+ * 記録がない日は「評価できず育たない」ことそのものが罰になっているので、
+ * 点数としてのペナルティは軽めにする（食べた内容が悪い日より重くしない）。
  */
 export const PENALTY = {
   severeShortfall: -10,
   mildShortfall: -5,
   energyShortfall: -10,
   saltExcess: -5,
-  missingRecord: -5,
+  missingRecord: -2,
 } as const;
 
 const SEVERE_RATIO = 0.5;

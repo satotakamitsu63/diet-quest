@@ -472,7 +472,7 @@ console.log('\n== 週ごとのふりかえり ==');
     `${goodReview.penaltyPoints} > ${review.penaltyPoints}`);
 
   const emptyDay = summarizeDay({ date: '2026-09-30', profile, age: 40, logs: [], targets });
-  check('記録がない日は−5点', calculateDailyPenalty(emptyDay) === -5,
+  check('記録がない日は−2点（食べた内容が悪い日より軽い罰にする）', calculateDailyPenalty(emptyDay) === -2,
     `${calculateDailyPenalty(emptyDay)}点`);
 }
 
