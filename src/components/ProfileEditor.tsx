@@ -166,13 +166,24 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
             <button
               key={species}
               type="button"
-              className={draft.species === species ? 'chip is-active' : 'chip'}
-              onClick={() => update('species', species)}
+              className={!draft.avatarEnabled && draft.species === species ? 'chip is-active' : 'chip'}
+              onClick={() => {
+                update('species', species);
+                update('avatarEnabled', false);
+              }}
             >
               {SPECIES_LABELS[species]}
             </button>
           ))}
+          <button
+            type="button"
+            className={draft.avatarEnabled ? 'chip is-active' : 'chip'}
+            onClick={() => update('avatarEnabled', true)}
+          >
+            本人（写真）
+          </button>
         </div>
+        {draft.avatarEnabled && <p className="note">保存済みの本人キャラクター画像をゲーム画面で表示します。</p>}
       </div>
 
       <div className="field-row">
