@@ -1,11 +1,12 @@
 import { isSupabaseConfigured, supabase } from './supabaseClient';
-import type { Profile } from './types';
+import type { CharacterSpecies, Profile } from './types';
 
 const BUCKET_NAME = 'avatar-level-images';
 const DATABASE_NAME = 'diet-quest-private-avatar';
 const STORE_NAME = 'level-images';
 const DATABASE_VERSION = 1;
 const DISPLAY_PREFERENCE_PREFIX = 'diet-quest:personal-avatar:';
+const SPECIES_PREFERENCE_PREFIX = 'diet-quest:character-species:';
 
 type AvatarImageRecord = {
   id: string;
@@ -39,6 +40,10 @@ function legacyDisplayPreferenceKey(profile: Profile): string {
   return `${DISPLAY_PREFERENCE_PREFIX}${avatarScope(profile)}`;
 }
 
+function speciesPreferenceKey(profile: Profile): string {
+  return `${SPECIES_PREFERENCE_PREFIX}${profile.id}`;
+}
+
 /** 本人画像を使うかの端末ごとの選択。未選択なら、保存済み画像を優先表示する。 */
 export function shouldDisplayPersonalAvatar(profile: Profile): boolean {
   const preference =
@@ -51,6 +56,19 @@ export function setPersonalAvatarDisplay(profile: Profile, enabled: boolean): vo
   const preference = enabled ? 'personal' : 'animal';
   window.localStorage.setItem(displayPreferenceKey(profile), preference);
   window.localStorage.setItem(legacyDisplayPreferenceKey(profile), preference);
+}
+
+/** この端末で選んだ動物キャラクター。プロフィール保存が失敗しても表示を即時反映する。 */
+export function selectedCharacterSpecies(profile: Profile): CharacterSpecies {
+  const selected = window.localStorage.getItem(speciesPreferenceKey(profile));
+  return selected === 'dog' || selected === 'cat' || selected === 'bear' || selected === 'bird' || selected === 'penguin'
+    ? selected
+    : profile.species;
+}
+
+/** 動物キャラクターの選択をこの端末に保存する。 */
+export function setSelectedCharacterSpecies(profile: Profile, species: CharacterSpecies): void {
+  window.localStorage.setItem(speciesPreferenceKey(profile), species);
 }
 
 function objectPath(userId: string, profile: Profile, level: number): string {

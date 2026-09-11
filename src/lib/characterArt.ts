@@ -17,8 +17,6 @@ export function levelFromGrowthStage(growthStage: number): number {
 
 /** public/characters 以下の、そのキャラクターが表示すべき画像パス（BASE_URL からの相対） */
 export function characterImagePath(species: CharacterSpecies, shapeValue: number, growthStage: number): string {
-  // 本人キャラクターの反映確認用。クマは明確に異なる既存のねこアートを表示する。
-  if (species === 'bear') return 'characters/cat/normal/1.png';
   const bodyCondition = bodyConditionFromShape(shapeValue);
   const level = levelFromGrowthStage(growthStage);
   return `characters/${species}/${bodyCondition}/${level}.png`;
