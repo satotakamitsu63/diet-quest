@@ -5,6 +5,7 @@ const BUCKET_NAME = 'avatar-level-images';
 const DATABASE_NAME = 'diet-quest-private-avatar';
 const STORE_NAME = 'level-images';
 const DATABASE_VERSION = 1;
+const DISPLAY_PREFERENCE_PREFIX = 'diet-quest:personal-avatar:';
 
 type AvatarImageRecord = {
   id: string;
@@ -28,6 +29,20 @@ function avatarScope(profile: Profile): string {
 
 function recordId(profile: Profile, level: number): string {
   return `${avatarScope(profile)}:${level}`;
+}
+
+function displayPreferenceKey(profile: Profile): string {
+  return `${DISPLAY_PREFERENCE_PREFIX}${avatarScope(profile)}`;
+}
+
+/** 本人画像を使うかの端末ごとの選択。未選択なら、保存済み画像を優先表示する。 */
+export function shouldDisplayPersonalAvatar(profile: Profile): boolean {
+  return window.localStorage.getItem(displayPreferenceKey(profile)) !== 'animal';
+}
+
+/** 本人画像／動物キャラクターの選択をこの端末に保存する。 */
+export function setPersonalAvatarDisplay(profile: Profile, enabled: boolean): void {
+  window.localStorage.setItem(displayPreferenceKey(profile), enabled ? 'personal' : 'animal');
 }
 
 function objectPath(userId: string, profile: Profile, level: number): string {

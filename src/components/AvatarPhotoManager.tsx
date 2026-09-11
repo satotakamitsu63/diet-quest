@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { GOAL_PHYSIQUE_LABELS, type GoalPhysique } from '../lib/avatarApi';
-import { getPrivateAvatarStatus, removePrivateAvatarSet, savePrivateAvatarSet, type PrivateAvatarStatus } from '../lib/privateAvatarStore';
+import { getPrivateAvatarStatus, removePrivateAvatarSet, savePrivateAvatarSet, setPersonalAvatarDisplay, type PrivateAvatarStatus } from '../lib/privateAvatarStore';
 import type { Profile } from '../lib/types';
 
 type Props = {
@@ -89,6 +89,7 @@ export function AvatarPhotoManager({
             setMessage(null);
             void savePrivateAvatarSet(profile, files)
               .then(() => {
+                setPersonalAvatarDisplay(profile, true);
                 onEnabledChange(true);
                 return onAvatarStored();
               })

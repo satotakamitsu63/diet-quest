@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { loadPrivateAvatarImage, type AvatarImageSource } from '../lib/privateAvatarStore';
+import { loadPrivateAvatarImage, shouldDisplayPersonalAvatar, type AvatarImageSource } from '../lib/privateAvatarStore';
 import type { Profile } from '../lib/types';
 import type { CharacterCondition } from '../logic/score';
 import { MascotArt } from './MascotArt';
@@ -24,7 +24,7 @@ export function AvatarArt({ profile, shapeValue, growthStage, condition, size, a
     let image: AvatarImageSource | null = null;
     setHasImageError(false);
     setImageUrl(null);
-    if (!profile.avatarEnabled) return () => undefined;
+    if (!shouldDisplayPersonalAvatar(profile)) return () => undefined;
     void loadPrivateAvatarImage(profile, level)
       .then((nextImage) => {
         image = nextImage;
@@ -38,7 +38,7 @@ export function AvatarArt({ profile, shapeValue, growthStage, condition, size, a
     };
   }, [profile, level, refreshKey]);
 
-  if (!profile.avatarEnabled || hasImageError || !imageUrl) {
+  if (!shouldDisplayPersonalAvatar(profile) || hasImageError || !imageUrl) {
     return (
       <MascotArt
         species={profile.species}

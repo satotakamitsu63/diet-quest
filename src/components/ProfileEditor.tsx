@@ -14,6 +14,7 @@ import {
 } from '../data/clubs';
 import { PREDICTED_HEIGHT_RANGE_CM, predictAdultHeight } from '../logic/heightGoal';
 import { AvatarPhotoManager } from './AvatarPhotoManager';
+import { setPersonalAvatarDisplay } from '../lib/privateAvatarStore';
 import {
   GOAL_PRESETS,
   MAXIMUM_TARGET_BODY_FAT,
@@ -145,6 +146,7 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
         ? { ...draft, avatarEnabled: true }
         : { ...draft, species, avatarEnabled: false };
     setDraft(nextDraft);
+    setPersonalAvatarDisplay(draft, species === 'personal');
     void saveDraft(nextDraft);
   }
 

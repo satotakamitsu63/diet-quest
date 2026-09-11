@@ -42,6 +42,11 @@ type ProfileRow = {
   created_at: string;
 };
 
+type ProfileWriteRow = Omit<
+  ProfileRow,
+  'avatar_photo_consent' | 'avatar_goal_physique' | 'avatar_enabled' | 'avatar_asset_folder'
+>;
+
 type MealLogRow = {
   id: string;
   group_id: string;
@@ -97,7 +102,7 @@ function toProfile(row: ProfileRow): Profile {
   };
 }
 
-function toProfileRow(profile: Profile): ProfileRow {
+function toProfileRow(profile: Profile): ProfileWriteRow {
   return {
     id: profile.id,
     group_id: profile.groupId,
@@ -123,10 +128,6 @@ function toProfileRow(profile: Profile): ProfileRow {
     club: profile.club,
     custom_special_move_name: profile.customSpecialMoveName,
     awards: profile.awards,
-    avatar_photo_consent: profile.avatarPhotoConsent,
-    avatar_goal_physique: profile.avatarGoalPhysique,
-    avatar_enabled: profile.avatarEnabled,
-    avatar_asset_folder: profile.avatarAssetFolder,
     created_at: profile.createdAt,
   };
 }
