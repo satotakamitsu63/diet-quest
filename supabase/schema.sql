@@ -141,6 +141,56 @@ alter table public.profiles add column if not exists avatar_photo_consent boolea
 alter table public.profiles add column if not exists avatar_goal_physique text check (avatar_goal_physique in ('slim', 'athletic', 'muscular'));
 alter table public.profiles add column if not exists avatar_enabled boolean not null default false;
 alter table public.profiles add column if not exists avatar_asset_folder text;
+
+-- 本人キャラクター用。公開URLは発行せず、パス先頭の認証ユーザー本人だけが読める。
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'avatar-level-images',
+  'avatar-level-images',
+  false,
+  10485760,
+  array['image/png', 'image/jpeg', 'image/webp']
+)
+on conflict (id) do update
+set public = false,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists avatar_level_images_owner_read on storage.objects;
+create policy avatar_level_images_owner_read on storage.objects
+  for select to authenticated
+  using (
+    bucket_id = 'avatar-level-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
+drop policy if exists avatar_level_images_owner_insert on storage.objects;
+create policy avatar_level_images_owner_insert on storage.objects
+  for insert to authenticated
+  with check (
+    bucket_id = 'avatar-level-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
+drop policy if exists avatar_level_images_owner_update on storage.objects;
+create policy avatar_level_images_owner_update on storage.objects
+  for update to authenticated
+  using (
+    bucket_id = 'avatar-level-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  )
+  with check (
+    bucket_id = 'avatar-level-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
+
+drop policy if exists avatar_level_images_owner_delete on storage.objects;
+create policy avatar_level_images_owner_delete on storage.objects
+  for delete to authenticated
+  using (
+    bucket_id = 'avatar-level-images'
+    and (storage.foldername(name))[1] = (select auth.uid()::text)
+  );
 -- 種族を、手描きイラストがある「いぬ・ねこ・くま・とり・ペンギン」の5系統に作り直した際の移行。
 -- 既存データは近いものへ寄せてから、制約を新しい系統に更新する
 update public.profiles set species = 'dog' where species in ('rabbit');

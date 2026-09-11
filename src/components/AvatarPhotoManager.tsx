@@ -19,7 +19,7 @@ function defaultGoalPhysique(sex: Profile['sex']): GoalPhysique {
   return sex === 'male' ? 'athletic' : 'slim';
 }
 
-/** 通信せず、Codexデスクトップで作ったローカル画像セットを参照するための設定画面。 */
+/** Codexデスクトップで作った画像セットを、本人だけが読める保存先へ登録する設定画面。 */
 export function AvatarPhotoManager({
   profile,
   sex,
@@ -46,7 +46,7 @@ export function AvatarPhotoManager({
   return (
     <section className="avatar-manager" aria-label="本人キャラクター">
       <h3>キャラクター写真を登録</h3>
-      <p className="note">写真はこのアプリへ保存・送信しません。Codexデスクトップでこの会話に顔と上半身が写る成人の本人写真を添付し、「本人キャラクターを10段階で作成」と依頼してください。生成画像はこのブラウザだけに保存されます。</p>
+      <p className="note">元写真はこのアプリへ保存・送信しません。Codexデスクトップで作成した10枚だけを、ログイン本人しか読めない非公開保存先へ登録します。GitHub Pages・Git・家族のアカウントには公開されません。</p>
       <label className="checkbox-field">
         <input type="checkbox" checked={consent} onChange={(event) => onConsentChange(event.target.checked)} />
         <span>この写真は本人の写真であり、本人キャラクターの生成に使用することへ同意します。</span>
@@ -76,14 +76,14 @@ export function AvatarPhotoManager({
             void savePrivateAvatarSet(profile, files)
               .then(() => {
                 onEnabledChange(true);
-                setMessage('このブラウザのたかみつアカウントへ10枚を保存しました。下の「保存する」を押してください。');
+                setMessage('10枚を本人専用の非公開保存先へ登録しました。下の「保存する」を押してください。');
               })
               .catch((error: unknown) => setMessage(error instanceof Error ? error.message : '画像を保存できませんでした。'))
               .finally(() => setIsImporting(false));
           }}
         />
       </label>
-      <p className="note">ファイル名は <code>1.png</code>〜<code>10.png</code> のまま選んでください。画像は公開フォルダ・Git・サーバーへ送られません。</p>
+      <p className="note">ファイル名は <code>1.png</code>〜<code>10.png</code> のまま選んでください。画像は公開フォルダやGitには送られず、本人ログイン時だけ取得できます。</p>
       <label className="checkbox-field">
         <input type="checkbox" checked={isEnabled} disabled={!consent} onChange={(event) => onEnabledChange(event.target.checked)} />
         <span>10枚の画像をローカルへ取り込んだので、ゲーム画面で本人キャラクターを表示する</span>
@@ -100,7 +100,7 @@ export function AvatarPhotoManager({
             if (!window.confirm('この端末に保存した本人キャラクター10枚を削除します。よろしいですか？')) return;
             void removePrivateAvatarSet(profile).then(() => {
               onEnabledChange(false);
-              setMessage('この端末の本人キャラクター画像を削除しました。設定の保存で反映されます。');
+              setMessage('本人キャラクター画像を非公開保存先とこの端末から削除しました。設定の保存で反映されます。');
             });
           }}
         >

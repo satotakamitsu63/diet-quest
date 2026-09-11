@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { loadPrivateAvatarImage } from '../lib/privateAvatarStore';
+import { loadPrivateAvatarImage, type AvatarImageSource } from '../lib/privateAvatarStore';
 import type { Profile } from '../lib/types';
 import type { CharacterCondition } from '../logic/score';
 import { MascotArt } from './MascotArt';
@@ -21,20 +21,20 @@ export function AvatarArt({ profile, shapeValue, growthStage, condition, size, a
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    let url: string | null = null;
+    let image: AvatarImageSource | null = null;
     setHasImageError(false);
     setImageUrl(null);
     if (!profile.avatarEnabled) return () => undefined;
     void loadPrivateAvatarImage(profile, level)
-      .then((nextUrl) => {
-        url = nextUrl;
-        if (active) setImageUrl(nextUrl);
-        else if (nextUrl) URL.revokeObjectURL(nextUrl);
+      .then((nextImage) => {
+        image = nextImage;
+        if (active) setImageUrl(nextImage?.url ?? null);
+        else nextImage?.revoke();
       })
       .catch(() => active && setHasImageError(true));
     return () => {
       active = false;
-      if (url) URL.revokeObjectURL(url);
+      image?.revoke();
     };
   }, [profile, level, refreshKey]);
 

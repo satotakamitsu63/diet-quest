@@ -119,6 +119,12 @@ VITE_SUPABASE_ANON_KEY=xxxx
 
 行レベルセキュリティにより、同じグループのメンバーだけが互いの記録を読み書きできる。
 
+すでにSupabaseを設定済みの場合は、本人キャラクターを初めて使う前に、SQL Editor で `supabase/avatar-storage.sql` を一度だけ実行する。
+
+### 本人キャラクター画像
+
+本人キャラクターの元写真はアプリへ保存しない。Codexデスクトップで作成したレベル1〜10の画像だけを、Supabase の非公開バケット `avatar-level-images` に保存する。バケットのポリシーにより、画像はパス先頭の認証ユーザー本人だけが読み書きでき、家族グループの他メンバー、GitHub Pages、GitHubリポジトリからは取得できない。
+
 ## データの出どころ
 
 - 栄養素の目標値：厚生労働省「日本人の食事摂取基準（2020年版）」（`src/data/dietaryReference.ts`）

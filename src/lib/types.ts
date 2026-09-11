@@ -91,13 +91,13 @@ export type Profile = {
   customSpecialMoveName: string | null;
   /** 受賞歴 */
   awards: Award[];
-  /** 本人が写真を生成用途に使うことへ同意したか。写真そのものはアプリへ保存しない。 */
+  /** 本人が写真を生成用途に使うことへ同意したか。元写真そのものはアプリへ保存しない。 */
   avatarPhotoConsent: boolean;
   /** デスクトップ生成時に使う、本人キャラクターの目標体型。 */
   avatarGoalPhysique: AvatarGoalPhysique | null;
-  /** ローカル生成済み画像をゲーム画面で使うか。 */
+  /** 非公開保存済みの画像をゲーム画面で使うか。 */
   avatarEnabled: boolean;
-  /** アカウントごとのローカル画像セット名。未設定ならプロフィールIDを使う。 */
+  /** 旧ローカル画像セット名。未設定ならプロフィールIDを使う。 */
   avatarAssetFolder: string | null;
   createdAt: string;
 };

@@ -7,6 +7,7 @@ import { MealRecorder } from './components/MealRecorder';
 import { ProfileEditor, createBlankProfile } from './components/ProfileEditor';
 import { FORCE_LOCAL_STORAGE_KEY, GROUP_ID_STORAGE_KEY, SupabaseGate } from './components/SupabaseGate';
 import { isSupabaseConfigured } from './lib/supabaseClient';
+import { removePrivateAvatarSet } from './lib/privateAvatarStore';
 import { DIETARY_REFERENCE_SOURCE } from './data/dietaryReference';
 import { useAppData } from './hooks/useAppData';
 import { findLatestBodyLog } from './logic/bodyGoal';
@@ -219,6 +220,8 @@ function AppContent() {
                 }}
                 onCancel={() => setEditingProfileId(null)}
                 onDelete={async (profileId) => {
+                  const profileToRemove = state.data.profiles.find((profile) => profile.id === profileId);
+                  if (profileToRemove) await removePrivateAvatarSet(profileToRemove);
                   await state.removeProfile(profileId);
                   setEditingProfileId(null);
                 }}
