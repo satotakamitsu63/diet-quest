@@ -111,18 +111,28 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
     setDraft((current) => ({ ...current, [key]: value }));
   }
 
-  async function handleSave() {
-    if (!draft.displayName.trim()) return;
+  async function saveDraft(nextDraft: Profile) {
+    if (!nextDraft.displayName.trim()) return;
     setIsSaving(true);
     try {
       await onSave({
-        ...draft,
-        displayName: draft.displayName.trim(),
-        characterName: draft.characterName.trim() || `${draft.displayName.trim()}のあいぼう`,
+        ...nextDraft,
+        displayName: nextDraft.displayName.trim(),
+        characterName: nextDraft.characterName.trim() || `${nextDraft.displayName.trim()}のあいぼう`,
       });
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function handleSave() {
+    await saveDraft(draft);
+  }
+
+  async function handleAvatarStored() {
+    const avatarDraft = { ...draft, avatarEnabled: true };
+    setDraft(avatarDraft);
+    await saveDraft(avatarDraft);
   }
 
   return (
@@ -538,6 +548,7 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
           onConsentChange={(value) => update('avatarPhotoConsent', value)}
           onGoalPhysiqueChange={(value: AvatarGoalPhysique) => update('avatarGoalPhysique', value)}
           onEnabledChange={(value) => update('avatarEnabled', value)}
+          onAvatarStored={handleAvatarStored}
         />
       )}
       {profile.displayName && !canManageAvatar && (

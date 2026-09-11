@@ -16,6 +16,12 @@ export type AvatarImageSource = {
   revoke: () => void;
 };
 
+export type PrivateAvatarStatus = {
+  count: number;
+  location: 'remote' | 'browser';
+  error: string | null;
+};
+
 function avatarScope(profile: Profile): string {
   return profile.ownerId ?? profile.id;
 }
@@ -144,6 +150,29 @@ export async function loadPrivateAvatarImage(profile: Profile, level: number): P
     if (!error && data?.signedUrl) return { url: data.signedUrl, revoke: () => undefined };
   }
   return loadFromBrowser(profile, level);
+}
+
+/** 本人が読めるレベル画像の保存枚数を返す。画面上の登録確認に使う。 */
+export async function getPrivateAvatarStatus(profile: Profile): Promise<PrivateAvatarStatus> {
+  try {
+    const userId = await currentUserId(profile);
+    if (userId && supabase) {
+      const { data, error } = await supabase.storage.from(BUCKET_NAME).list(`${userId}/${profile.id}/levels`, { limit: 10 });
+      if (error) return { count: 0, location: 'remote', error: error.message };
+      const count = (data ?? []).filter((file) => /^(10|[1-9])\.avatar$/.test(file.name)).length;
+      return { count, location: 'remote', error: null };
+    }
+    const records = await Promise.all(
+      Array.from({ length: 10 }, (_, index) => withStore<AvatarImageRecord | undefined>('readonly', (store) => store.get(recordId(profile, index + 1)))),
+    );
+    return { count: records.filter(Boolean).length, location: 'browser', error: null };
+  } catch (error) {
+    return {
+      count: 0,
+      location: isSupabaseConfigured ? 'remote' : 'browser',
+      error: error instanceof Error ? error.message : '本人キャラクターの保存状況を確認できませんでした。',
+    };
+  }
 }
 
 /** 本人キャラクターを非公開ストレージと、この端末のキャッシュから削除する。 */

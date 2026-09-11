@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { GOAL_PHYSIQUE_LABELS, type GoalPhysique } from '../lib/avatarApi';
-import { removePrivateAvatarSet, savePrivateAvatarSet } from '../lib/privateAvatarStore';
+import { getPrivateAvatarStatus, removePrivateAvatarSet, savePrivateAvatarSet, type PrivateAvatarStatus } from '../lib/privateAvatarStore';
 import type { Profile } from '../lib/types';
 
 type Props = {
@@ -13,6 +13,7 @@ type Props = {
   onConsentChange: (value: boolean) => void;
   onGoalPhysiqueChange: (value: GoalPhysique) => void;
   onEnabledChange: (value: boolean) => void;
+  onAvatarStored: () => Promise<void>;
 };
 
 function defaultGoalPhysique(sex: Profile['sex']): GoalPhysique {
@@ -30,10 +31,23 @@ export function AvatarPhotoManager({
   onConsentChange,
   onGoalPhysiqueChange,
   onEnabledChange,
+  onAvatarStored,
 }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [status, setStatus] = useState<PrivateAvatarStatus | null>(null);
+  const [statusVersion, setStatusVersion] = useState(0);
   const selectedGoal = goalPhysique ?? defaultGoalPhysique(sex);
+
+  useEffect(() => {
+    let active = true;
+    void getPrivateAvatarStatus(profile).then((nextStatus) => {
+      if (active) setStatus(nextStatus);
+    });
+    return () => {
+      active = false;
+    };
+  }, [profile, statusVersion]);
   if (!isAdult) {
     return (
       <section className="avatar-manager" aria-label="本人キャラクター">
@@ -76,7 +90,11 @@ export function AvatarPhotoManager({
             void savePrivateAvatarSet(profile, files)
               .then(() => {
                 onEnabledChange(true);
-                setMessage('10枚を本人専用の非公開保存先へ登録しました。下の「保存する」を押してください。');
+                return onAvatarStored();
+              })
+              .then(() => {
+                setStatusVersion((current) => current + 1);
+                setMessage('10枚を本人専用の非公開保存先へ登録し、ゲーム画面への表示も有効にしました。');
               })
               .catch((error: unknown) => setMessage(error instanceof Error ? error.message : '画像を保存できませんでした。'))
               .finally(() => setIsImporting(false));
@@ -84,12 +102,32 @@ export function AvatarPhotoManager({
         />
       </label>
       <p className="note">ファイル名は <code>1.png</code>〜<code>10.png</code> のまま選んでください。画像は公開フォルダやGitには送られず、本人ログイン時だけ取得できます。</p>
+      {status && (
+        <p className={status.error ? 'alert' : 'note'}>
+          保存状況：{status.location === 'remote' ? '本人専用の非公開ストレージ' : 'この端末'}に {status.count}/10 枚
+          {status.error ? `（${status.error}）` : ''}
+        </p>
+      )}
       <label className="checkbox-field">
         <input type="checkbox" checked={isEnabled} disabled={!consent} onChange={(event) => onEnabledChange(event.target.checked)} />
         <span>10枚の画像をローカルへ取り込んだので、ゲーム画面で本人キャラクターを表示する</span>
       </label>
       {isEnabled && (
         <p className="note">ゲーム画面で、現在レベルの本人キャラクターを表示します。</p>
+      )}
+      {status?.count === 10 && !isEnabled && (
+        <button
+          type="button"
+          className="primary-button"
+          onClick={() => {
+            onEnabledChange(true);
+            void onAvatarStored().catch((error: unknown) => {
+              setMessage(error instanceof Error ? error.message : '本人キャラクターの表示設定を保存できませんでした。');
+            });
+          }}
+        >
+          保存済みの画像をゲームに反映する
+        </button>
       )}
       {message && <p className="note">{message}</p>}
       {isEnabled && (
@@ -100,7 +138,8 @@ export function AvatarPhotoManager({
             if (!window.confirm('この端末に保存した本人キャラクター10枚を削除します。よろしいですか？')) return;
             void removePrivateAvatarSet(profile).then(() => {
               onEnabledChange(false);
-              setMessage('本人キャラクター画像を非公開保存先とこの端末から削除しました。設定の保存で反映されます。');
+              setStatusVersion((current) => current + 1);
+              setMessage('本人キャラクター画像を非公開保存先とこの端末から削除しました。');
             });
           }}
         >
