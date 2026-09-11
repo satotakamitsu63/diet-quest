@@ -5,7 +5,7 @@ import type { ProfileView } from '../logic/profileView';
 import { CONDITION_LABELS, MAX_GROWTH_STAGE } from '../logic/score';
 import { buildSuggestions } from '../logic/suggestions';
 import { formatReviewRange } from '../logic/weeklyReview';
-import { MascotArt } from './MascotArt';
+import { AvatarArt } from './AvatarArt';
 import { NutrientBars } from './NutrientBars';
 
 type Props = { profile: Profile; view: ProfileView };
@@ -18,8 +18,8 @@ export function HomeView({ profile, view }: Props) {
   return (
     <>
       <section className="card mascot-card">
-        <MascotArt
-          species={profile.species}
+        <AvatarArt
+          profile={profile}
           shapeValue={character.shapeValue}
           growthStage={character.growthStage}
           condition={character.condition}

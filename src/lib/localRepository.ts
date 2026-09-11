@@ -11,7 +11,13 @@ function readFromStorage(): AppData {
     const empty = createEmptyAppData();
     return {
       group: parsed.group ?? empty.group,
-      profiles: parsed.profiles ?? [],
+      profiles: (parsed.profiles ?? []).map((profile) => ({
+        ...profile,
+        avatarPhotoConsent: profile.avatarPhotoConsent ?? false,
+        avatarGoalPhysique: profile.avatarGoalPhysique ?? null,
+        avatarEnabled: profile.avatarEnabled ?? false,
+        avatarAssetFolder: profile.avatarAssetFolder ?? null,
+      })),
       mealLogs: parsed.mealLogs ?? [],
       bodyLogs: parsed.bodyLogs ?? [],
       activeProfileId: parsed.activeProfileId ?? null,

@@ -94,7 +94,9 @@ function AppContent() {
             await state.saveProfile(profile);
             state.setActiveProfileId(profile.id);
             setIsAddingProfile(false);
-            setTab('home');
+            // 初期プロフィールを保存した直後に、成人なら本人キャラクターも続けて登録できるようにする。
+            setEditingProfileId(profile.id);
+            setTab('settings');
           }}
           onCancel={state.data.profiles.length > 0 ? () => setIsAddingProfile(false) : undefined}
         />
@@ -206,6 +208,11 @@ function AppContent() {
             {editingProfile ? (
               <ProfileEditor
                 profile={editingProfile}
+                canManageAvatar={
+                  state.currentUserId === null ||
+                  editingProfile.ownerId === null ||
+                  editingProfile.ownerId === state.currentUserId
+                }
                 onSave={async (profile) => {
                   await state.saveProfile(profile);
                   setEditingProfileId(null);

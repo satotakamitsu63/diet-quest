@@ -11,3 +11,10 @@ tsconfig.tsbuildinfo
 
 # キャラクターデザインの参考画像（容量が大きいのでリポジトリには含めない）
 クエスト用イラスト
+
+# 本人キャラクターはローカルのデスクトップ生成物。Gitやクラウドへ含めない。
+public/avatar-levels/*
+!public/avatar-levels/README.md
+
+# 取り込み前の本人キャラクター。公開フォルダにもGitにも置かない。
+.private-avatar-assets/

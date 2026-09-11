@@ -14,7 +14,7 @@ import {
   type Combatant,
 } from '../logic/battle';
 import { buildProfileView } from '../logic/profileView';
-import { MascotArt } from './MascotArt';
+import { AvatarArt } from './AvatarArt';
 
 /** ステータスの棒の長さを決めるための上限。だいたいの最大値。 */
 const STAT_SCALE = 320;
@@ -48,13 +48,13 @@ function formatPercent(multiplier: number): string {
   return percent === 0 ? '±0%' : percent > 0 ? `+${percent}%` : `${percent}%`;
 }
 
-type FighterCardProps = { combatant: Combatant; isWinner: boolean | null };
+type FighterCardProps = { combatant: Combatant; profile: Profile; isWinner: boolean | null };
 
-function FighterCard({ combatant, isWinner }: FighterCardProps) {
+function FighterCard({ combatant, profile, isWinner }: FighterCardProps) {
   return (
     <div className={isWinner ? 'fighter is-winner' : 'fighter'}>
-      <MascotArt
-        species={combatant.species}
+      <AvatarArt
+        profile={profile}
         shapeValue={combatant.shapeValue}
         growthStage={combatant.growthStage}
         condition={combatant.condition}
@@ -142,15 +142,17 @@ export function BattleArena({ data, activeProfile }: Props) {
           </div>
         </div>
 
-        {theirs && (
+        {theirs && opponentProfile && (
           <div className="arena">
             <FighterCard
               combatant={mine}
+              profile={activeProfile}
               isWinner={isFinished ? result.winnerProfileId === mine.profileId : null}
             />
             <span className="arena-versus">VS</span>
             <FighterCard
               combatant={theirs}
+              profile={opponentProfile}
               isWinner={isFinished ? result.winnerProfileId === theirs.profileId : null}
             />
           </div>

@@ -42,6 +42,9 @@ export type ActivityLevelValue = ActivityLevel;
  */
 export type GoalPreset = 'health' | 'ideal' | 'athletic' | 'physique' | 'custom';
 
+/** デスクトップで本人キャラクターを生成するときの到達イメージ。 */
+export type AvatarGoalPhysique = 'slim' | 'athletic' | 'muscular';
+
 export type MealSlot = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 export const MEAL_SLOT_LABELS: Record<MealSlot, string> = {
@@ -88,6 +91,14 @@ export type Profile = {
   customSpecialMoveName: string | null;
   /** 受賞歴 */
   awards: Award[];
+  /** 本人が写真を生成用途に使うことへ同意したか。写真そのものはアプリへ保存しない。 */
+  avatarPhotoConsent: boolean;
+  /** デスクトップ生成時に使う、本人キャラクターの目標体型。 */
+  avatarGoalPhysique: AvatarGoalPhysique | null;
+  /** ローカル生成済み画像をゲーム画面で使うか。 */
+  avatarEnabled: boolean;
+  /** アカウントごとのローカル画像セット名。未設定ならプロフィールIDを使う。 */
+  avatarAssetFolder: string | null;
   createdAt: string;
 };
 

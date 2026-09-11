@@ -137,6 +137,10 @@ alter table public.profiles add column if not exists target_adult_height_cm nume
 alter table public.profiles add column if not exists club text not null default 'none';
 alter table public.profiles add column if not exists custom_special_move_name text;
 alter table public.profiles add column if not exists awards jsonb not null default '[]'::jsonb;
+alter table public.profiles add column if not exists avatar_photo_consent boolean not null default false;
+alter table public.profiles add column if not exists avatar_goal_physique text check (avatar_goal_physique in ('slim', 'athletic', 'muscular'));
+alter table public.profiles add column if not exists avatar_enabled boolean not null default false;
+alter table public.profiles add column if not exists avatar_asset_folder text;
 -- 種族を、手描きイラストがある「いぬ・ねこ・くま・とり・ペンギン」の5系統に作り直した際の移行。
 -- 既存データは近いものへ寄せてから、制約を新しい系統に更新する
 update public.profiles set species = 'dog' where species in ('rabbit');

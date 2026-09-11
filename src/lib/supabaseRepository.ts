@@ -35,6 +35,10 @@ type ProfileRow = {
   club: Profile['club'];
   custom_special_move_name: string | null;
   awards: Profile['awards'];
+  avatar_photo_consent: boolean | null;
+  avatar_goal_physique: Profile['avatarGoalPhysique'];
+  avatar_enabled: boolean | null;
+  avatar_asset_folder: string | null;
   created_at: string;
 };
 
@@ -85,6 +89,10 @@ function toProfile(row: ProfileRow): Profile {
     club: row.club ?? 'none',
     customSpecialMoveName: row.custom_special_move_name,
     awards: row.awards ?? [],
+    avatarPhotoConsent: row.avatar_photo_consent ?? false,
+    avatarGoalPhysique: row.avatar_goal_physique ?? null,
+    avatarEnabled: row.avatar_enabled ?? false,
+    avatarAssetFolder: row.avatar_asset_folder ?? null,
     createdAt: row.created_at,
   };
 }
@@ -115,6 +123,10 @@ function toProfileRow(profile: Profile): ProfileRow {
     club: profile.club,
     custom_special_move_name: profile.customSpecialMoveName,
     awards: profile.awards,
+    avatar_photo_consent: profile.avatarPhotoConsent,
+    avatar_goal_physique: profile.avatarGoalPhysique,
+    avatar_enabled: profile.avatarEnabled,
+    avatar_asset_folder: profile.avatarAssetFolder,
     created_at: profile.createdAt,
   };
 }

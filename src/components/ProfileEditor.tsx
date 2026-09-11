@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { ActivityLevel } from '../data/dietaryReference';
 import { createId } from '../lib/repository';
-import { SPECIES_KEYS, SPECIES_LABELS, type Award, type GoalPreset, type Profile } from '../lib/types';
+import { SPECIES_KEYS, SPECIES_LABELS, type AvatarGoalPhysique, type Award, type GoalPreset, type Profile } from '../lib/types';
 import {
   AWARD_CATEGORY_LABELS,
   AWARD_SCALE_LABELS,
@@ -13,6 +13,7 @@ import {
   type ClubKey,
 } from '../data/clubs';
 import { PREDICTED_HEIGHT_RANGE_CM, predictAdultHeight } from '../logic/heightGoal';
+import { AvatarPhotoManager } from './AvatarPhotoManager';
 import {
   GOAL_PRESETS,
   MAXIMUM_TARGET_BODY_FAT,
@@ -62,6 +63,10 @@ export function createBlankProfile(groupId: string): Profile {
     club: 'none',
     customSpecialMoveName: null,
     awards: [],
+    avatarPhotoConsent: false,
+    avatarGoalPhysique: null,
+    avatarEnabled: false,
+    avatarAssetFolder: null,
     createdAt: new Date().toISOString(),
   };
 }
@@ -71,9 +76,11 @@ type Props = {
   onSave: (profile: Profile) => Promise<void>;
   onCancel?: () => void;
   onDelete?: (profileId: string) => Promise<void>;
+  /** Supabase利用時、本人キャラクターを設定できるのはプロフィール所有アカウントだけ。 */
+  canManageAvatar?: boolean;
 };
 
-export function ProfileEditor({ profile, onSave, onCancel, onDelete }: Props) {
+export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAvatar = true }: Props) {
   const [draft, setDraft] = useState<Profile>(profile);
   const [isSaving, setIsSaving] = useState(false);
   const [awardTitle, setAwardTitle] = useState('');
@@ -518,6 +525,26 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete }: Props) {
             </>
           )}
         </>
+      )}
+
+      {profile.displayName && canManageAvatar && (
+        <AvatarPhotoManager
+          profile={profile}
+          sex={draft.sex}
+          isAdult={age !== null && !childMode}
+          consent={draft.avatarPhotoConsent}
+          goalPhysique={draft.avatarGoalPhysique}
+          isEnabled={draft.avatarEnabled}
+          onConsentChange={(value) => update('avatarPhotoConsent', value)}
+          onGoalPhysiqueChange={(value: AvatarGoalPhysique) => update('avatarGoalPhysique', value)}
+          onEnabledChange={(value) => update('avatarEnabled', value)}
+        />
+      )}
+      {profile.displayName && !canManageAvatar && (
+        <section className="avatar-manager" aria-label="本人キャラクター">
+          <h3>キャラクター写真を登録</h3>
+          <p className="note">本人キャラクターの写真設定は、このプロフィールを所有するアカウントからのみ変更できます。</p>
+        </section>
       )}
 
       <div className="button-row">
