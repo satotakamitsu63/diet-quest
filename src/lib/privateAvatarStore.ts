@@ -32,17 +32,25 @@ function recordId(profile: Profile, level: number): string {
 }
 
 function displayPreferenceKey(profile: Profile): string {
+  return `${DISPLAY_PREFERENCE_PREFIX}${profile.id}`;
+}
+
+function legacyDisplayPreferenceKey(profile: Profile): string {
   return `${DISPLAY_PREFERENCE_PREFIX}${avatarScope(profile)}`;
 }
 
 /** 本人画像を使うかの端末ごとの選択。未選択なら、保存済み画像を優先表示する。 */
 export function shouldDisplayPersonalAvatar(profile: Profile): boolean {
-  return window.localStorage.getItem(displayPreferenceKey(profile)) !== 'animal';
+  const preference =
+    window.localStorage.getItem(displayPreferenceKey(profile)) ?? window.localStorage.getItem(legacyDisplayPreferenceKey(profile));
+  return preference !== 'animal';
 }
 
 /** 本人画像／動物キャラクターの選択をこの端末に保存する。 */
 export function setPersonalAvatarDisplay(profile: Profile, enabled: boolean): void {
-  window.localStorage.setItem(displayPreferenceKey(profile), enabled ? 'personal' : 'animal');
+  const preference = enabled ? 'personal' : 'animal';
+  window.localStorage.setItem(displayPreferenceKey(profile), preference);
+  window.localStorage.setItem(legacyDisplayPreferenceKey(profile), preference);
 }
 
 function objectPath(userId: string, profile: Profile, level: number): string {
