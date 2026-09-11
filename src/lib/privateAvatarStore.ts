@@ -142,12 +142,15 @@ export async function savePrivateAvatarSet(profile: Profile, files: File[]): Pro
   }
 }
 
-/** ログイン本人用の短時間署名付きURL、またはローカル保存画像を返す。 */
+/** ログイン本人として画像データを取得し、表示用の Object URL を返す。 */
 export async function loadPrivateAvatarImage(profile: Profile, level: number): Promise<AvatarImageSource | null> {
   const userId = await currentUserId(profile);
   if (userId && supabase) {
-    const { data, error } = await supabase.storage.from(BUCKET_NAME).createSignedUrl(objectPath(userId, profile, level), 60 * 15);
-    if (!error && data?.signedUrl) return { url: data.signedUrl, revoke: () => undefined };
+    const { data, error } = await supabase.storage.from(BUCKET_NAME).download(objectPath(userId, profile, level));
+    if (!error && data) {
+      const url = URL.createObjectURL(data);
+      return { url, revoke: () => URL.revokeObjectURL(url) };
+    }
   }
   return loadFromBrowser(profile, level);
 }
