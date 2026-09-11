@@ -83,6 +83,7 @@ type Props = {
 export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAvatar = true }: Props) {
   const [draft, setDraft] = useState<Profile>(profile);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [awardTitle, setAwardTitle] = useState('');
   const [awardCategory, setAwardCategory] = useState<AwardCategory>('sports');
   const [awardScale, setAwardScale] = useState<AwardScale>('school');
@@ -114,12 +115,15 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
   async function saveDraft(nextDraft: Profile) {
     if (!nextDraft.displayName.trim()) return;
     setIsSaving(true);
+    setSaveError(null);
     try {
       await onSave({
         ...nextDraft,
         displayName: nextDraft.displayName.trim(),
         characterName: nextDraft.characterName.trim() || `${nextDraft.displayName.trim()}のあいぼう`,
       });
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'プロフィールを保存できませんでした。');
     } finally {
       setIsSaving(false);
     }
@@ -133,6 +137,15 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
     const avatarDraft = { ...draft, avatarEnabled: true };
     setDraft(avatarDraft);
     await saveDraft(avatarDraft);
+  }
+
+  function selectCharacterType(species: Profile['species'] | 'personal') {
+    const nextDraft =
+      species === 'personal'
+        ? { ...draft, avatarEnabled: true }
+        : { ...draft, species, avatarEnabled: false };
+    setDraft(nextDraft);
+    void saveDraft(nextDraft);
   }
 
   return (
@@ -167,10 +180,8 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
               key={species}
               type="button"
               className={!draft.avatarEnabled && draft.species === species ? 'chip is-active' : 'chip'}
-              onClick={() => {
-                update('species', species);
-                update('avatarEnabled', false);
-              }}
+              disabled={isSaving}
+              onClick={() => selectCharacterType(species)}
             >
               {SPECIES_LABELS[species]}
             </button>
@@ -178,7 +189,8 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
           <button
             type="button"
             className={draft.avatarEnabled ? 'chip is-active' : 'chip'}
-            onClick={() => update('avatarEnabled', true)}
+            disabled={isSaving}
+            onClick={() => selectCharacterType('personal')}
           >
             本人（写真）
           </button>
@@ -570,6 +582,7 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
       )}
 
       <div className="button-row">
+        {saveError && <p className="alert">{saveError}</p>}
         <button
           type="button"
           className="primary-button"

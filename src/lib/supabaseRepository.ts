@@ -201,7 +201,8 @@ export class SupabaseRepository implements Repository {
       const { data } = await this.client.auth.getUser();
       ownerId = data.user?.id ?? null;
     }
-    await this.client.from('profiles').upsert(toProfileRow({ ...profile, ownerId }));
+    const { error } = await this.client.from('profiles').upsert(toProfileRow({ ...profile, ownerId }));
+    if (error) throw new Error(`プロフィールを保存できませんでした。${error.message}`);
   }
 
   /** いまログインしているアカウントの ID。未ログインなら null。 */
