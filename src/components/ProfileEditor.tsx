@@ -529,7 +529,7 @@ export function ProfileEditor({ profile, onSave, onCancel, onDelete, canManageAv
 
       {profile.displayName && canManageAvatar && (
         <AvatarPhotoManager
-          profile={profile}
+          profile={draft}
           sex={draft.sex}
           isAdult={age !== null && !childMode}
           consent={draft.avatarPhotoConsent}

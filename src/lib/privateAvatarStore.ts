@@ -74,7 +74,11 @@ async function currentUserId(profile: Profile): Promise<string | null> {
   if (!isSupabaseConfigured || !supabase) return null;
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new Error('本人キャラクターを使うにはログインが必要です。');
-  if (profile.ownerId !== data.user.id) throw new Error('本人キャラクターは、このプロフィールの所有者だけが操作できます。');
+  // 旧プロフィールは owner_id が未設定のことがある。画像登録の直後にプロフィールを
+  // 保存すると所有者が確定するため、その初回登録だけは現在ログイン中の本人に許可する。
+  if (profile.ownerId !== null && profile.ownerId !== data.user.id) {
+    throw new Error('本人キャラクターは、このプロフィールの所有者だけが操作できます。');
+  }
   return data.user.id;
 }
 
