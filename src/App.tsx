@@ -6,7 +6,7 @@ import { HomeView } from './components/HomeView';
 import { MealRecorder } from './components/MealRecorder';
 import { ProfileEditor, createBlankProfile } from './components/ProfileEditor';
 import { FORCE_LOCAL_STORAGE_KEY, GROUP_ID_STORAGE_KEY, SupabaseGate } from './components/SupabaseGate';
-import { isSupabaseConfigured } from './lib/supabaseClient';
+import { isSupabaseConfigured, supabase } from './lib/supabaseClient';
 import { removePrivateAvatarSet } from './lib/privateAvatarStore';
 import { DIETARY_REFERENCE_SOURCE } from './data/dietaryReference';
 import { useAppData } from './hooks/useAppData';
@@ -58,6 +58,17 @@ function AppContent() {
   const [isAddingProfile, setIsAddingProfile] = useState(false);
   /** 「きろく」タブでどの日の記録として保存・表示するか */
   const [recordDate, setRecordDate] = useState(todayKey());
+
+  /** ログイン済みの端末でも、別の家族アカウントで安全に入り直せるようにする。 */
+  async function switchAccount(): Promise<void> {
+    const shouldSwitch = window.confirm('この端末からログアウトして、別のアカウントで入り直しますか？');
+    if (!shouldSwitch) return;
+
+    await supabase?.auth.signOut();
+    window.localStorage.removeItem(GROUP_ID_STORAGE_KEY);
+    window.localStorage.removeItem(FORCE_LOCAL_STORAGE_KEY);
+    window.location.reload();
+  }
 
   const activeProfile =
     state.data.profiles.find((profile) => profile.id === state.data.activeProfileId) ??
@@ -256,6 +267,11 @@ function AppContent() {
                 栄養の目標値は{DIETARY_REFERENCE_SOURCE}にもとづきます。食品の成分値は日本食品標準成分表2020年版（八訂）、
                 料理の値は標準的なレシピからの目安です。医療行為の判断に使うものではありません。
               </p>
+              {isSupabaseConfigured && (
+                <button type="button" className="ghost-button" onClick={() => void switchAccount()}>
+                  アカウントを切り替える
+                </button>
+              )}
             </section>
           </>
         )}
