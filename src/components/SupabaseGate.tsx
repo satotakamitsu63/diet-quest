@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabaseClient';
 export const GROUP_ID_STORAGE_KEY = 'diet-quest:group-id';
 /** 共有せずこの端末だけで使う、と選んだことを覚えておく。 */
 export const FORCE_LOCAL_STORAGE_KEY = 'diet-quest:force-local';
+/** 既存の所属先があっても、合言葉で別の家族グループを選び直す。 */
+export const GROUP_SELECTION_STORAGE_KEY = 'diet-quest:choose-group';
 
 type Stage = 'checking' | 'signedOut' | 'chooseGroup';
 type AuthMode = 'signIn' | 'signUp';
@@ -36,6 +38,7 @@ export function SupabaseGate({ onReady }: Props) {
     const membership = (data as MembershipRow[] | null)?.[0];
     if (membership) {
       window.localStorage.setItem(GROUP_ID_STORAGE_KEY, membership.group_id);
+      window.localStorage.removeItem(GROUP_SELECTION_STORAGE_KEY);
       onReady();
       return;
     }
@@ -46,12 +49,18 @@ export function SupabaseGate({ onReady }: Props) {
     if (!supabase) return undefined;
     void (async () => {
       const { data } = await supabase.auth.getSession();
-      if (data.session) await findExistingGroup();
+      if (data.session) {
+        if (window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY)) setStage('chooseGroup');
+        else await findExistingGroup();
+      }
       else setStage('signedOut');
     })();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) void findExistingGroup();
+      if (session) {
+        if (window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY)) setStage('chooseGroup');
+        else void findExistingGroup();
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, [findExistingGroup]);
@@ -118,6 +127,7 @@ export function SupabaseGate({ onReady }: Props) {
     }
     window.localStorage.setItem(GROUP_ID_STORAGE_KEY, data as string);
     window.localStorage.removeItem(FORCE_LOCAL_STORAGE_KEY);
+    window.localStorage.removeItem(GROUP_SELECTION_STORAGE_KEY);
     window.alert(`合言葉は「${code}」です。家族にこの合言葉を伝えてください。`);
     onReady();
   }
@@ -133,6 +143,7 @@ export function SupabaseGate({ onReady }: Props) {
       return;
     }
     window.localStorage.setItem(GROUP_ID_STORAGE_KEY, data as string);
+    window.localStorage.removeItem(GROUP_SELECTION_STORAGE_KEY);
     onReady();
   }
 

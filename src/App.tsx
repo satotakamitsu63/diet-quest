@@ -5,7 +5,12 @@ import { FamilyBoard } from './components/FamilyBoard';
 import { HomeView } from './components/HomeView';
 import { MealRecorder } from './components/MealRecorder';
 import { ProfileEditor, createBlankProfile } from './components/ProfileEditor';
-import { FORCE_LOCAL_STORAGE_KEY, GROUP_ID_STORAGE_KEY, SupabaseGate } from './components/SupabaseGate';
+import {
+  FORCE_LOCAL_STORAGE_KEY,
+  GROUP_ID_STORAGE_KEY,
+  GROUP_SELECTION_STORAGE_KEY,
+  SupabaseGate,
+} from './components/SupabaseGate';
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient';
 import { removePrivateAvatarSet } from './lib/privateAvatarStore';
 import { DIETARY_REFERENCE_SOURCE } from './data/dietaryReference';
@@ -31,7 +36,7 @@ function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
   const [needsGate, setNeedsGate] = useState(
     () =>
       isSupabaseConfigured &&
-      !window.localStorage.getItem(GROUP_ID_STORAGE_KEY) &&
+      (!window.localStorage.getItem(GROUP_ID_STORAGE_KEY) || Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY))) &&
       !window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY),
   );
   return {
@@ -67,6 +72,16 @@ function AppContent() {
     await supabase?.auth.signOut();
     window.localStorage.removeItem(GROUP_ID_STORAGE_KEY);
     window.localStorage.removeItem(FORCE_LOCAL_STORAGE_KEY);
+    window.location.reload();
+  }
+
+  /** 現在のログインを保ったまま、合言葉で共有先を選び直す。 */
+  function switchFamilyGroup(): void {
+    const shouldSwitch = window.confirm('家族グループを切り替えますか？ ログインは維持され、記録は削除されません。');
+    if (!shouldSwitch) return;
+
+    window.localStorage.removeItem(GROUP_ID_STORAGE_KEY);
+    window.localStorage.setItem(GROUP_SELECTION_STORAGE_KEY, '1');
     window.location.reload();
   }
 
@@ -268,9 +283,14 @@ function AppContent() {
                 料理の値は標準的なレシピからの目安です。医療行為の判断に使うものではありません。
               </p>
               {isSupabaseConfigured && (
-                <button type="button" className="ghost-button" onClick={() => void switchAccount()}>
-                  アカウントを切り替える
-                </button>
+                <div className="button-row">
+                  <button type="button" className="ghost-button" onClick={switchFamilyGroup}>
+                    家族グループを切り替える
+                  </button>
+                  <button type="button" className="ghost-button" onClick={() => void switchAccount()}>
+                    アカウントを切り替える
+                  </button>
+                </div>
               )}
             </section>
           </>
