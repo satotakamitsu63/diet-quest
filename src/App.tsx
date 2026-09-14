@@ -114,7 +114,15 @@ function AppContent() {
       <main className="app">
         <header className="app-header">
           <h1>ダイエットクエスト</h1>
+          {isSupabaseConfigured && (
+            <button type="button" className="header-login-button" onClick={() => void switchAccount()}>
+              ログイン
+            </button>
+          )}
         </header>
+        {isSupabaseConfigured && (
+          <p className="note">家族の記録を使う場合は、右上の「ログイン」からアカウントに入り直してください。</p>
+        )}
         <ProfileEditor
           profile={createBlankProfile(state.data.group.id)}
           onSave={async (profile) => {
