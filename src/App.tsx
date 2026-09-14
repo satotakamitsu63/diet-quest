@@ -138,17 +138,24 @@ function AppContent() {
       <header className="app-header">
         <h1>ダイエットクエスト</h1>
         {activeProfile && (
-          <select
-            className="profile-select"
-            value={activeProfile.id}
-            onChange={(event) => state.setActiveProfileId(event.target.value)}
-          >
-            {state.data.profiles.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.displayName}
-              </option>
-            ))}
-          </select>
+          <div className="header-actions">
+            <select
+              className="profile-select"
+              value={activeProfile.id}
+              onChange={(event) => state.setActiveProfileId(event.target.value)}
+            >
+              {state.data.profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.displayName}
+                </option>
+              ))}
+            </select>
+            {isSupabaseConfigured && (
+              <button type="button" className="header-login-button" onClick={() => void switchAccount()}>
+                ログイン
+              </button>
+            )}
+          </div>
         )}
       </header>
 
