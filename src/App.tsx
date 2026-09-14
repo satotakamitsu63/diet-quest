@@ -22,6 +22,10 @@ import { formatShortDate, todayKey } from './lib/dates';
 
 type Tab = 'home' | 'record' | 'body' | 'battle' | 'family' | 'settings';
 
+function hasLoginRequest(): boolean {
+  return new URLSearchParams(window.location.search).get('login') === '1';
+}
+
 const TAB_LABELS: Record<Tab, string> = {
   home: 'ホーム',
   record: 'きろく',
@@ -32,16 +36,24 @@ const TAB_LABELS: Record<Tab, string> = {
 };
 
 /** Supabase を使う設定なら、ログインとグループ参加を先に済ませる。 */
-function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
+function useSupabaseReadiness(): { forceLogin: boolean; needsGate: boolean; markReady: () => void } {
+  const forceLogin = hasLoginRequest();
   const [needsGate, setNeedsGate] = useState(
     () =>
       isSupabaseConfigured &&
-      (!window.localStorage.getItem(GROUP_ID_STORAGE_KEY) || Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY))) &&
-      !window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY),
+      (forceLogin ||
+        ((!window.localStorage.getItem(GROUP_ID_STORAGE_KEY) || Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY))) &&
+          !window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY))),
   );
   return {
+    forceLogin,
     needsGate,
     markReady: () => {
+      if (forceLogin) {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete('login');
+        window.history.replaceState(null, '', nextUrl);
+      }
       setNeedsGate(false);
       window.location.reload();
     },
@@ -51,7 +63,7 @@ function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
 export function App() {
   const supabaseReadiness = useSupabaseReadiness();
   if (supabaseReadiness.needsGate) {
-    return <SupabaseGate onReady={supabaseReadiness.markReady} />;
+    return <SupabaseGate forceLogin={supabaseReadiness.forceLogin} onReady={supabaseReadiness.markReady} />;
   }
   return <AppContent />;
 }
