@@ -1,11 +1,12 @@
 import { createEmptyAppData, type Repository } from './repository';
 import type { AppData, BodyLog, FamilyGroup, MealLog, Profile } from './types';
 
-const STORAGE_KEY = 'diet-quest:data:v1';
+/** ローカル専用モードの保存キー。起動時に未完成のローカル保存を判定するためにも使う。 */
+export const LOCAL_APP_DATA_STORAGE_KEY = 'diet-quest:data:v1';
 
 function readFromStorage(): AppData {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(LOCAL_APP_DATA_STORAGE_KEY);
     if (!raw) return createEmptyAppData();
     const parsed = JSON.parse(raw) as Partial<AppData>;
     const empty = createEmptyAppData();
@@ -29,7 +30,7 @@ function readFromStorage(): AppData {
 
 function writeToStorage(data: AppData): void {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.localStorage.setItem(LOCAL_APP_DATA_STORAGE_KEY, JSON.stringify(data));
   } catch {
     // プライベートブラウズや保存領域が使えない環境では、その回の保存をあきらめて画面は動かし続ける
   }

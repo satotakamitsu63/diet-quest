@@ -13,17 +13,17 @@ type AuthMode = 'signIn' | 'signUp';
 
 type MembershipRow = { group_id: string; family_groups: { name: string; invite_code: string } | null };
 
-type Props = { forceLogin?: boolean; onReady: () => void };
+type Props = { onReady: () => void };
 
 /**
  * Supabase を使う設定のときに、ログインと家族グループへの参加を済ませる画面。
  * ここを通らないと行レベルセキュリティにより家族のデータを読めない。
  */
-export function SupabaseGate({ forceLogin = false, onReady }: Props) {
+export function SupabaseGate({ onReady }: Props) {
   const [stage, setStage] = useState<Stage>('checking');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [authMode, setAuthMode] = useState<AuthMode>(forceLogin ? 'signIn' : 'signUp');
+  const [authMode, setAuthMode] = useState<AuthMode>('signUp');
   const [groupName, setGroupName] = useState('わが家');
   const [inviteCode, setInviteCode] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -47,10 +47,6 @@ export function SupabaseGate({ forceLogin = false, onReady }: Props) {
 
   useEffect(() => {
     if (!supabase) return undefined;
-    if (forceLogin) {
-      setStage('signedOut');
-      return undefined;
-    }
     void (async () => {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
@@ -67,7 +63,7 @@ export function SupabaseGate({ forceLogin = false, onReady }: Props) {
       }
     });
     return () => listener.subscription.unsubscribe();
-  }, [findExistingGroup, forceLogin]);
+  }, [findExistingGroup]);
 
   /** Supabase が返す英語のエラーを、そのまま出しても分からないので言い換える。 */
   function describeAuthError(rawMessage: string): string {
@@ -112,7 +108,6 @@ export function SupabaseGate({ forceLogin = false, onReady }: Props) {
       );
       return;
     }
-    if (forceLogin) await findExistingGroup();
     // ログインできたら onAuthStateChange が拾って次へ進む
   }
 

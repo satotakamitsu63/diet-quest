@@ -13,6 +13,7 @@ import {
 } from './components/SupabaseGate';
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient';
 import { removePrivateAvatarSet } from './lib/privateAvatarStore';
+import { LOCAL_APP_DATA_STORAGE_KEY } from './lib/localRepository';
 import { DIETARY_REFERENCE_SOURCE } from './data/dietaryReference';
 import { useAppData } from './hooks/useAppData';
 import { findLatestBodyLog } from './logic/bodyGoal';
@@ -21,10 +22,6 @@ import { MEAL_SLOT_LABELS } from './lib/types';
 import { formatShortDate, todayKey } from './lib/dates';
 
 type Tab = 'home' | 'record' | 'body' | 'battle' | 'family' | 'settings';
-
-function hasLoginRequest(): boolean {
-  return new URLSearchParams(window.location.search).get('login') === '1';
-}
 
 const TAB_LABELS: Record<Tab, string> = {
   home: 'ホーム',
@@ -35,25 +32,36 @@ const TAB_LABELS: Record<Tab, string> = {
   settings: '設定',
 };
 
+/** ローカル専用モードに、実際に使っているプロフィールがあるかを安全に確認する。 */
+function hasSavedLocalProfiles(): boolean {
+  try {
+    const storedData = window.localStorage.getItem(LOCAL_APP_DATA_STORAGE_KEY);
+    if (!storedData) return false;
+    const parsedData = JSON.parse(storedData) as { profiles?: unknown };
+    return Array.isArray(parsedData.profiles) && parsedData.profiles.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Supabase を使う設定なら、ログインとグループ参加を先に済ませる。 */
-function useSupabaseReadiness(): { forceLogin: boolean; needsGate: boolean; markReady: () => void } {
-  const forceLogin = hasLoginRequest();
+function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
   const [needsGate, setNeedsGate] = useState(
-    () =>
-      isSupabaseConfigured &&
-      (forceLogin ||
-        ((!window.localStorage.getItem(GROUP_ID_STORAGE_KEY) || Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY))) &&
-          !window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY))),
+    () => {
+      if (!isSupabaseConfigured) return false;
+      const needsSharedGroup =
+        !window.localStorage.getItem(GROUP_ID_STORAGE_KEY) ||
+        Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY));
+      const localOnlyMode = Boolean(window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY));
+
+      // 空のローカル専用モードは、以前の途中操作が残った状態。
+      // 家族アカウントのホームへ戻すため、共有先を確認し直す。
+      return needsSharedGroup && (!localOnlyMode || !hasSavedLocalProfiles());
+    },
   );
   return {
-    forceLogin,
     needsGate,
     markReady: () => {
-      if (forceLogin) {
-        const nextUrl = new URL(window.location.href);
-        nextUrl.searchParams.delete('login');
-        window.history.replaceState(null, '', nextUrl);
-      }
       setNeedsGate(false);
       window.location.reload();
     },
@@ -63,7 +71,7 @@ function useSupabaseReadiness(): { forceLogin: boolean; needsGate: boolean; mark
 export function App() {
   const supabaseReadiness = useSupabaseReadiness();
   if (supabaseReadiness.needsGate) {
-    return <SupabaseGate forceLogin={supabaseReadiness.forceLogin} onReady={supabaseReadiness.markReady} />;
+    return <SupabaseGate onReady={supabaseReadiness.markReady} />;
   }
   return <AppContent />;
 }
