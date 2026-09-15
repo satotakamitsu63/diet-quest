@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BattleArena } from './components/BattleArena';
 import { BodyLogCard } from './components/BodyLogCard';
 import { FamilyBoard } from './components/FamilyBoard';
@@ -13,13 +13,13 @@ import {
 } from './components/SupabaseGate';
 import { isSupabaseConfigured, supabase } from './lib/supabaseClient';
 import { removePrivateAvatarSet } from './lib/privateAvatarStore';
-import { LOCAL_APP_DATA_STORAGE_KEY } from './lib/localRepository';
 import { DIETARY_REFERENCE_SOURCE } from './data/dietaryReference';
 import { useAppData } from './hooks/useAppData';
 import { findLatestBodyLog } from './logic/bodyGoal';
 import { buildProfileView } from './logic/profileView';
 import { MEAL_SLOT_LABELS } from './lib/types';
 import { formatShortDate, todayKey } from './lib/dates';
+import { clearUnmatchedLog, getUnmatchedLog } from './lib/unmatchedFoodLog';
 
 type Tab = 'home' | 'record' | 'body' | 'battle' | 'family' | 'settings';
 
@@ -32,18 +32,6 @@ const TAB_LABELS: Record<Tab, string> = {
   settings: '設定',
 };
 
-/** ローカル専用モードに、実際に使っているプロフィールがあるかを安全に確認する。 */
-function hasSavedLocalProfiles(): boolean {
-  try {
-    const storedData = window.localStorage.getItem(LOCAL_APP_DATA_STORAGE_KEY);
-    if (!storedData) return false;
-    const parsedData = JSON.parse(storedData) as { profiles?: unknown };
-    return Array.isArray(parsedData.profiles) && parsedData.profiles.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 /** Supabase を使う設定なら、ログインとグループ参加を先に済ませる。 */
 function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
   const [needsGate, setNeedsGate] = useState(
@@ -54,9 +42,11 @@ function useSupabaseReadiness(): { needsGate: boolean; markReady: () => void } {
         Boolean(window.localStorage.getItem(GROUP_SELECTION_STORAGE_KEY));
       const localOnlyMode = Boolean(window.localStorage.getItem(FORCE_LOCAL_STORAGE_KEY));
 
-      // 空のローカル専用モードは、以前の途中操作が残った状態。
-      // 家族アカウントのホームへ戻すため、共有先を確認し直す。
-      return needsSharedGroup && (!localOnlyMode || !hasSavedLocalProfiles());
+      // ローカル専用モードを選んだ直後はプロフィールがまだ0件でも正常な状態なので、
+      // 「共有先を選び直したい」（GROUP_SELECTION_STORAGE_KEY）の意思表示がない限り
+      // ゲートを出し直さない。共有先の切り替えは switchFamilyGroup 側で
+      // FORCE_LOCAL_STORAGE_KEY を解除して区別する。
+      return needsSharedGroup && !localOnlyMode;
     },
   );
   return {
@@ -83,6 +73,14 @@ function AppContent() {
   const [isAddingProfile, setIsAddingProfile] = useState(false);
   /** 「きろく」タブでどの日の記録として保存・表示するか */
   const [recordDate, setRecordDate] = useState(todayKey());
+  /** localStorage の中身は React の外で変わるので、明示的に数えて再読み込みのきっかけにする */
+  const [unmatchedRefresh, setUnmatchedRefresh] = useState(0);
+  const unmatchedFoods = useMemo(() => getUnmatchedLog(), [unmatchedRefresh]);
+  const [unmatchedCopyStatus, setUnmatchedCopyStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tab === 'settings') setUnmatchedRefresh((count) => count + 1);
+  }, [tab]);
 
   /** ログイン済みの端末でも、別の家族アカウントで安全に入り直せるようにする。 */
   async function switchAccount(): Promise<void> {
@@ -101,6 +99,7 @@ function AppContent() {
     if (!shouldSwitch) return;
 
     window.localStorage.removeItem(GROUP_ID_STORAGE_KEY);
+    window.localStorage.removeItem(FORCE_LOCAL_STORAGE_KEY);
     window.localStorage.setItem(GROUP_SELECTION_STORAGE_KEY, '1');
     window.location.reload();
   }
@@ -328,6 +327,53 @@ function AppContent() {
                 </div>
               )}
             </section>
+
+            {unmatchedFoods.length > 0 && (
+              <section className="card">
+                <h2 className="card-title">認識できなかった食べ物</h2>
+                <p className="note">
+                  記録しようとして見つからなかった言葉です。まとめてコピーしてClaudeに貼り付ければ、
+                  食品データベースに追加してもらえます。
+                </p>
+                <ul className="log-list">
+                  {unmatchedFoods.map((entry) => (
+                    <li key={entry.term}>
+                      <div className="log-head">
+                        <strong>{entry.term}</strong>
+                        <span>{entry.count}回</span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+                <div className="button-row">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      const text = unmatchedFoods.map((entry) => entry.term).join('、');
+                      void navigator.clipboard
+                        .writeText(text)
+                        .then(() => setUnmatchedCopyStatus('コピーしました'))
+                        .catch(() => setUnmatchedCopyStatus('コピーできませんでした'));
+                    }}
+                  >
+                    一覧をコピー
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      clearUnmatchedLog();
+                      setUnmatchedRefresh((count) => count + 1);
+                      setUnmatchedCopyStatus(null);
+                    }}
+                  >
+                    消す
+                  </button>
+                </div>
+                {unmatchedCopyStatus && <p className="note">{unmatchedCopyStatus}</p>}
+              </section>
+            )}
           </>
         )}
       </div>

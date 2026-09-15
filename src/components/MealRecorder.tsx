@@ -4,6 +4,7 @@ import { scaleNutrients } from '../data/nutrients';
 import { formatShortDate, recentDateKeys } from '../lib/dates';
 import { createId } from '../lib/repository';
 import { MEAL_SLOT_LABELS, type MealItem, type MealLog, type MealSlot, type Profile } from '../lib/types';
+import { recordUnmatchedTerms } from '../lib/unmatchedFoodLog';
 import { createMealItem, parseSpokenMeal, searchFoods } from '../logic/parseSpokenMeal';
 
 const SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -76,6 +77,7 @@ export function MealRecorder({ profile, onSave, date, onDateChange }: Props) {
       })),
     ]);
     setUnmatched(parsed.unmatchedSegments);
+    recordUnmatchedTerms(parsed.unmatchedSegments);
     setGramsDrafts({});
     setText('');
   }
